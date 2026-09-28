@@ -2,12 +2,11 @@
 // lying on the ground.
 
 import * as THREE from 'three';
-import { MAP } from '/shared/map.js';
 import { makeSpearMesh } from './characters.js';
 
 const MAX_PARTICLES = 700;
 
-export function createEffects(scene) {
+export function createEffects(scene, map) {
   // Particles: one instanced cube mesh. Dead particles are scaled to zero.
   const geo = new THREE.BoxGeometry(1, 1, 1);
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -95,11 +94,11 @@ export function createEffects(scene) {
   const dust = new THREE.Points(
     (() => {
       const g = new THREE.BufferGeometry();
-      const n = 500, arr = new Float32Array(n * 3);
+      const n = map.dust ? 1500 : 500, arr = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) {
-        arr[i * 3] = (Math.random() * 2 - 1) * MAP.halfSize;
-        arr[i * 3 + 1] = Math.random() * MAP.ceiling;
-        arr[i * 3 + 2] = (Math.random() * 2 - 1) * MAP.halfSize;
+        const lo = map.dust ? map.dust.min : [-map.halfSize, 0, -map.halfSize];
+        const hi = map.dust ? map.dust.max : [map.halfSize, map.ceiling, map.halfSize];
+        for (let k = 0; k < 3; k++) arr[i * 3 + k] = lo[k] + Math.random() * (hi[k] - lo[k]);
       }
       g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
       return g;
@@ -140,7 +139,7 @@ export function createEffects(scene) {
       emberAcc += dt;
       while (emberAcc > 0.05) {
         emberAcc -= 0.05;
-        const [x, y, z] = MAP.braziers[Math.floor(Math.random() * MAP.braziers.length)];
+        const [x, y, z] = map.braziers[Math.floor(Math.random() * map.braziers.length)];
         emit(new THREE.Vector3(x + (Math.random() - 0.5) * 0.5, y + 1.1, z + (Math.random() - 0.5) * 0.5),
           new THREE.Vector3((Math.random() - 0.5) * 0.6, 1.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.6),
           { life: 1.6, size: 0.04, grav: -0.5, color: Math.random() < 0.5 ? 0xff7a2a : 0xff2a0a });

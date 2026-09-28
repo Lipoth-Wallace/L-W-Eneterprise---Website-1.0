@@ -1,31 +1,29 @@
-// Title menu: character preview, settings, and quick match / private room / join.
+// Title menu: character preview, name, quick match / private room / join /
+// practice, and the Settings panel.
 
 import * as THREE from 'three';
 import { createCharacter, CHARACTER_INFO } from './characters.js';
+import { settings, saveSettings, setupSettingsPanel } from './settings.js';
+import { initAudio, playMusic, previewBus, currentTrackName } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 
-function load(key, fallback) {
-  try { const v = localStorage.getItem('bloodflint.' + key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
-}
-function save(key, value) {
-  try { localStorage.setItem('bloodflint.' + key, JSON.stringify(value)); } catch { /* storage unavailable */ }
-}
-
-export function loadSettings() {
-  return {
-    name: load('name', ''),
-    character: load('character', 'brute'),
-    sens: load('sens', 1),
-    fov: load('fov', 100),
-    volume: load('volume', 0.7),
-    res: load('res', 270),
-  };
-}
-
 export function setupMenu({ onStart }) {
-  const settings = loadSettings();
   const menu = $('menu');
+  const panel = setupSettingsPanel({ onPreview: previewBus });
+
+  // Browsers only allow sound after the first click, so the beat starts then.
+  const startAudio = () => {
+    initAudio(settings.volumes);
+    playMusic(settings.musicTrack);
+    updateNowPlaying();
+  };
+  addEventListener('pointerdown', startAudio, { once: true });
+  function updateNowPlaying() {
+    const name = currentTrackName();
+    $('now-playing').textContent = name ? `♪ ${name}` : '♪ click anywhere for sound';
+  }
+  updateNowPlaying();
 
   // Preview: a tiny renderer upscaled with nearest-neighbour, like the game.
   const canvas = $('preview');
@@ -52,7 +50,7 @@ export function setupMenu({ onStart }) {
   let model = null;
   function pick(type) {
     settings.character = type;
-    save('character', type);
+    saveSettings('general');
     if (model) scene.remove(model.group);
     model = createCharacter(type);
     scene.add(model.group);
@@ -71,29 +69,17 @@ export function setupMenu({ onStart }) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     t += dt;
-    model.update({ vx: 0, vz: 0, yaw: Math.sin(t * 0.6) * 0.7, pitch: 0, crouch: false, slide: false, ground: true, weapon: 'spear', hasSpear: true }, dt);
+    // A slow head-nod to the beat
+    model.update({ vx: 0, vz: 0, yaw: Math.sin(t * 0.6) * 0.7, pitch: Math.max(0, Math.sin(t * Math.PI * 1.47)) * 0.25, crouch: false, slide: false, ground: true, weapon: 'spear', hasSpear: true }, dt);
     key.intensity = 30 * (0.85 + 0.15 * Math.sin(t * 11) * Math.sin(t * 5.3));
     renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
 
-  // Settings
   const name = $('name');
   name.value = settings.name;
-  name.addEventListener('input', () => { settings.name = name.value; save('name', name.value); });
-  function slider(id, outId, key, fmt) {
-    const el = $(id), out = $(outId);
-    el.value = settings[key];
-    out.textContent = fmt(settings[key]);
-    el.addEventListener('input', () => { settings[key] = +el.value; out.textContent = fmt(+el.value); save(key, +el.value); });
-  }
-  slider('sens', 'sens-out', 'sens', (v) => v.toFixed(2));
-  slider('fov', 'fov-out', 'fov', (v) => String(v));
-  slider('vol', 'vol-out', 'volume', (v) => String(Math.round(v * 100)));
-  const res = $('res');
-  res.value = String(settings.res);
-  res.addEventListener('change', () => { settings.res = +res.value; save('res', +res.value); });
+  name.addEventListener('input', () => { settings.name = name.value; saveSettings('general'); });
 
   const code = $('code');
   const urlRoom = new URLSearchParams(location.search).get('room');
@@ -102,22 +88,26 @@ export function setupMenu({ onStart }) {
 
   const start = (opts) => {
     $('menu-error').textContent = '';
-    onStart({ ...settings, name: settings.name || 'Caveman', ...opts });
+    if (!settings.name) settings.name = 'Caveman';
+    onStart(opts);
   };
   $('quick').addEventListener('click', () => start({}));
   $('create').addEventListener('click', () => start({ private: true }));
+  $('practice').addEventListener('click', () => start({ practice: true }));
   $('join').addEventListener('click', () => {
     if (code.value.length !== 4) { $('menu-error').textContent = 'Room codes are four letters.'; return; }
     start({ room: code.value });
   });
   code.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('join').click(); });
+  $('open-settings').addEventListener('click', () => panel.open());
 
   return {
-    settings,
+    panel,
     hide() { menu.hidden = true; running = false; },
     show(error = '') {
       menu.hidden = false;
       $('menu-error').textContent = error;
+      updateNowPlaying();
       if (!running) { running = true; last = performance.now(); requestAnimationFrame(loop); }
     },
   };

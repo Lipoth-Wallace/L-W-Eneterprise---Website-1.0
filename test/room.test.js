@@ -22,6 +22,13 @@ function place(room, p, pos, advance) {
   room.handleState(p, { seq: p.spawnSeq, p: pos, yaw: 0, pitch: 0 });
 }
 
+// Wind the spear up for the full windup, then throw.
+function chargedThrow(room, p, msg, advance) {
+  room.handleCharge(p, { on: true });
+  advance(C.SPEAR_WINDUP);
+  room.handleFire(p, { weapon: 'throw', ...msg });
+}
+
 function aim(from, to) {
   return normalize([to[0] - from[0], to[1] - from[1], to[2] - from[2]]);
 }
@@ -83,7 +90,7 @@ test('thrown spear lands on the floor, can not be reused, and is picked up by wa
   place(room, a, [0, 0, -26], advance);
   const eye = [0, 1.6, -26];
   // Throw at the north wall
-  room.handleFire(a, { weapon: 'throw', o: eye, d: [0, 0, -1], time: 0 });
+  chargedThrow(room, a, { o: eye, d: [0, 0, -1], time: 0 }, advance);
   assert.equal(a.spear.state, 'ground');
   assert.ok(Math.abs(a.spear.p[1]) < 0.2, `rests on the floor: ${a.spear.p}`);
   // Can't stab or throw without it
@@ -101,15 +108,47 @@ test('a spear thrown onto a ledge lands on the ledge top', () => {
   const { room, a, advance } = setup();
   place(room, a, [20, 0, 0], advance);
   const eye = [20, 1.6, 0];
-  room.handleFire(a, { weapon: 'throw', o: eye, d: aim(eye, [28, 3, 0]), time: 0 });
+  chargedThrow(room, a, { o: eye, d: aim(eye, [28, 3, 0]), time: 0 }, advance);
   assert.equal(a.spear.state, 'ground');
   assert.ok(Math.abs(a.spear.p[1] - 2) < 0.2, `on the ledge: ${a.spear.p}`);
+});
+
+test('the thrown spear hits a near miss that the sling would not', () => {
+  const { room, a, b, advance } = setup();
+  place(room, a, [-20, 0, -26], advance);
+  place(room, b, [20, 0, -26], advance);
+  const eye = [-20, 1.6, -26];
+  // Aim 0.75 m to the side of b's centre: outside the sling box (0.48), inside the spear's
+  const d = aim(eye, [20, 1, -26 + 0.75]);
+  room.handleFire(a, { weapon: 'sling', o: eye, d, time: 0 });
+  assert.equal(b.alive, true, 'sling missed');
+  chargedThrow(room, a, { o: eye, d, time: 0 }, advance);
+  assert.equal(b.alive, false, 'spear hit');
+});
+
+test('a throw before the windup finishes is ignored', () => {
+  const { room, a, b, advance } = setup();
+  place(room, a, [-20, 0, -26], advance);
+  place(room, b, [20, 0, -26], advance);
+  const eye = [-20, 1.6, -26];
+  const shot = { weapon: 'throw', o: eye, d: aim(eye, [20, 1, -26]), time: 0 };
+  room.handleFire(a, shot);                       // never charged
+  assert.equal(b.alive, true);
+  room.handleCharge(a, { on: true });
+  advance(C.SPEAR_WINDUP / 3);
+  room.handleFire(a, shot);                       // charged too briefly
+  assert.equal(b.alive, true);
+  assert.equal(room.snapshot().players.find((p) => p.id === a.id).ch, 1, 'charge is visible to the opponent');
+  advance(C.SPEAR_WINDUP);
+  room.handleFire(a, shot);
+  assert.equal(b.alive, false);
+  assert.equal(a.charging, false);
 });
 
 test('an unreachable spear flies home after SPEAR_RETURN_TIME', () => {
   const { room, a, advance } = setup();
   place(room, a, [0, 0, -26], advance);
-  room.handleFire(a, { weapon: 'throw', o: [0, 1.6, -26], d: [0, 0, -1], time: 0 });
+  chargedThrow(room, a, { o: [0, 1.6, -26], d: [0, 0, -1], time: 0 }, advance);
   advance(C.SPEAR_RETURN_TIME + 0.1);
   assert.equal(a.spear.state, 'held');
 });

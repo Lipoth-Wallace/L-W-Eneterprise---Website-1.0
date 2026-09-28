@@ -52,6 +52,12 @@ export function playerHitbox(x, y, z, crouching, bonus = 0) {
   return { min: [x - r, y - bonus * 0.5, z - r], max: [x + r, y + h + bonus * 0.5, z + r] };
 }
 
+// Extra hitbox size per weapon: the sling needs a clean hit, the thrown spear
+// is forgiving, and the stab gets a little reach for fights at speed.
+export function hitboxBonus(kind) {
+  return kind === 'throw' ? C.THROW_HITBOX_BONUS : kind === 'stab' ? C.STAB_HITBOX_BONUS : 0;
+}
+
 export function normalize(v) {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];

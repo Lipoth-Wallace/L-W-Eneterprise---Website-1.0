@@ -73,6 +73,8 @@ export function createViewmodel(character) {
     slingT: 0,
     reloadLeft: 0,
     bobPhase: 0,
+    charge: 0,      // 0..1 windup progress (set by the game)
+    chargeK: 0,     // smoothed for display
   };
 
   return {
@@ -81,7 +83,8 @@ export function createViewmodel(character) {
     setAspect(a) { camera.aspect = a; camera.updateProjectionMatrix(); },
     setWeapon(w) { anim.weapon = w; },
     stab() { anim.stab = 1; },
-    throwSpear() { anim.throwT = 1; },
+    throwSpear() { anim.throwT = 1; anim.charge = 0; anim.chargeK = 0; },
+    setCharge(k) { anim.charge = k; },
     slingShot() { anim.slingT = 1; anim.reloadLeft = SLING_RELOAD; },
     /** hasSpear: bool; move: { speed, ground, slide, dt } */
     update(dt, hasSpear, move, reloadLeft) {
@@ -106,12 +109,17 @@ export function createViewmodel(character) {
       const thrust = s > 0.6 ? (1 - s) / 0.4 : s / 0.6;
       spearRig.visible = hasSpear || anim.throwT > 0.7;
       spear.visible = hasSpear || anim.throwT > 0.7;
+      // Charge: the spear draws back over the shoulder, tip up, and trembles
+      // once it's ready to throw.
+      anim.chargeK += (anim.charge - anim.chargeK) * Math.min(1, dt * 30);
+      const c = anim.chargeK;
+      const shake = anim.charge >= 1 ? (Math.random() - 0.5) * 0.006 : 0;
       spearRig.position.set(
-        spearHome.x + bobX - thrust * 0.12,
-        spearHome.y + bobY + airLift - (1 - anim.raise.spear) * 0.7 + thrust * 0.06,
-        spearHome.z - thrust * 0.45 - anim.throwT * 0.2,
+        spearHome.x + bobX - thrust * 0.12 + c * 0.04 + shake,
+        spearHome.y + bobY + airLift - (1 - anim.raise.spear) * 0.7 + thrust * 0.06 + c * 0.13 + shake,
+        spearHome.z - thrust * 0.45 - anim.throwT * 0.2 + c * 0.22,
       );
-      spearRig.rotation.set(0.06 - thrust * 0.12 + anim.throwT * 0.3, 0.16 - thrust * 0.1, -tilt);
+      spearRig.rotation.set(0.06 - thrust * 0.12 + anim.throwT * 0.3 + c * 0.22, 0.16 - thrust * 0.1 - c * 0.08, -tilt - c * 0.1);
 
       // Sling: a whip forward on release, then the pouch spins while reloading
       const whip = anim.slingT;

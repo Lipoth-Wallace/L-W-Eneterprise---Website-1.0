@@ -119,7 +119,7 @@ function startSlide(s, wx, wz, hasWish) {
 
 /**
  * Advances a player by dt seconds.
- * input: { fwd: -1..1, strafe: -1..1, jump: bool (held), crouch: bool (held), yaw, pitch }
+ * input: { fwd: -1..1, strafe: -1..1, jump, crouch, sprint (bools, held), yaw, pitch }
  * Returns event flags for sounds and effects: { jumped, landed, slid }.
  */
 export function stepPlayer(s, input, dt, boxes = MAP.boxes) {
@@ -185,7 +185,8 @@ function substep(s, input, dt, boxes) {
     } else {
       if (!wantJump) applyFriction(s, C.FRICTION, dt);
       if (hasWish) {
-        accelerate(s, wx, wz, s.crouching ? C.CROUCH_SPEED : C.RUN_SPEED, C.GROUND_ACCEL / C.RUN_SPEED, dt);
+        const top = s.crouching ? C.CROUCH_SPEED : input.sprint ? C.RUN_SPEED : C.WALK_SPEED;
+        accelerate(s, wx, wz, top, C.GROUND_ACCEL / C.RUN_SPEED, dt);
       }
     }
   } else {

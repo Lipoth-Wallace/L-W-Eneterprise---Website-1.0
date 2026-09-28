@@ -22,28 +22,67 @@ anyone else who is waiting.
 
 ## How it plays
 
+Default controls (all rebindable under **Settings → Controls**):
+
 | Input | Action |
 | --- | --- |
-| `WASD` | Move |
+| `WASD` | Move (walk) |
+| `Shift` | Sprint. With **Auto sprint** on you always run, and Shift walks. |
+| `Ctrl` / `C` | Slide (crouch while moving) |
 | `Space` | Jump (hold to bunny hop) |
-| `Shift` / `C` | Slide (crouch while moving) |
 | `LMB` | Stab (spear out) or sling shot (sling out) |
-| `RMB` | Throw the spear |
+| `RMB` | Hold to draw the spear back (0.18 s), release to throw |
 | `F` | Quick stab from either weapon |
 | `Q`, `1`/`2`, wheel | Swap weapon |
+| `R` | Restart the parkour course (practice) |
+
+**Ctrl and Ctrl+W:** browsers normally close the tab on Ctrl+W, and you press
+W while sliding. In Chrome and Edge the game goes fullscreen and locks the
+keyboard (the Keyboard Lock API), so the game receives the keypress instead.
+Other browsers ask "Leave site?" before closing. Hold `Esc` to leave
+fullscreen.
 
 - **Every hit kills.** Deathmatch, first to 10.
-- **Spear:** the stab reaches about 2.8 m. The throw is hitscan at any range,
-  but then you're unarmed for melee until you walk over the spear to pick it
-  back up. A spear that lands somewhere you can't reach flies back to you
-  after 15 s.
-- **Sling:** hitscan at any range, with a 1.25 s reload. The sling is your
-  steady weapon; the spear throw is the all-in shot.
-- **Movement:** a slide boosts you to at least 16 m/s and barely slows down.
+- **Spear:** the stab reaches about 2.8 m. The throw needs a short windup,
+  which your opponent can see as your arm cocking back. The throw has a much
+  fatter hitbox than the sling (+0.45 m on every side) but costs you the
+  spear until you walk over it. A spear that lands somewhere you can't reach
+  flies back after 15 s. The server enforces the windup.
+- **Sling:** hitscan with an exact hitbox and a 1.25 s reload.
+- **Movement:** a slide boosts you to at least 16 m/s and holds its speed.
   Jumping out of a slide keeps that speed. Landing with crouch still held
-  drops you straight into another slide. Strafing in the air adds speed, as
-  in Quake. The jump is low (about 1.3 m) so the fighting stays horizontal:
-  you can clear waist-high cover, but the 2 m ledges need their steps.
+  drops you into another slide. Air strafing adds speed. The jump is low
+  (about 1.3 m).
+
+## Practice range
+
+**Practice range** on the title screen runs offline in the browser, with no
+server needed. The map, *The Quarry*, is open to a red night sky:
+
+- **Shooting range** (in front of you): fighters from 9 m to 75 m, in
+  different poses and light: crouched, lit by a brazier, behind waist cover,
+  sliding in shadow, on a ledge against the sky, and far off. Hits drop them
+  for 1.5 s. The HUD tracks hits, shots and accuracy.
+- **Parkour course** (behind you): a timed run over a blood pit with a
+  4 m gap, a slide tunnel, a 7 m gap that needs a slide-jump, stepping
+  stones, and a 9 m drop-gap off a step. It has one checkpoint, and your best
+  time is saved on this browser. A walkway leads back to the start.
+  `test/course.test.js` plays each gap with scripted inputs to prove it's
+  possible and needs the intended move.
+
+## Sound and style
+
+- **Music:** three original 90s boom-bap beats, synthesised live: *Kiln
+  Cypher*, *Red Moon Blues* and *Flint Street*. They use swung hats, dusty
+  drums, Rhodes-style chords, bass and vinyl crackle. They're new
+  compositions in that style, not samples or covers. The beat muffles while
+  you're dead or paused.
+- **Mixer:** Settings → Audio has sliders for master, weapons, kills &
+  deaths, movement, cave ambience, interface and music, plus a beat picker.
+- **Gold chain:** every fighter wears one. In first person, yours is a small
+  physics sim: it swings with you and whips into view on slides and hard
+  landings. It flashes on kills and jingles when it swings hard. Turn it off
+  under **Settings → General → Gold chain in first person**.
 
 ## Layout
 
@@ -52,7 +91,9 @@ server/index.js    HTTP + WebSocket server, rooms, snapshot loop
 server/room.js     One match: hit checks, lag compensation, spear, score
 shared/            Code the server and browser both load
   constants.js     Every tuning number
-  map.js           The arena (axis-aligned boxes), spawns, lights
+  map.js           Map registry (MAP = the online arena)
+  maps/kiln.js     The Kiln: 1v1 cave arena
+  maps/range.js    The Quarry: practice range and parkour course
   physics.js       Player movement
   raycast.js       Hitscan maths
 public/            The client (three.js, no build step)
@@ -62,7 +103,9 @@ public/            The client (three.js, no build step)
   js/viewmodel.js  First-person hands and weapons
   js/post.js       Low-res render, dither and vignette pass
   js/effects.js    Tracers, blood, embers, ground spears
-  js/audio.js      Synthesised sound (no audio files)
+  js/audio.js      Synthesised sound, mixer channels and the beats
+  js/settings.js   Settings, keybinds, the Settings panel
+  js/chain.js      First-person gold chain (verlet rope)
 test/              node:test suites
 ```
 

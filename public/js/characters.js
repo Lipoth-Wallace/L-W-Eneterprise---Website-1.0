@@ -32,6 +32,26 @@ function spike(r, h, mat, x, y, z, rx = 0, rz = 0) {
   return m;
 }
 
+// Gold chain draped over the chest, with a medallion on a pivot so it can swing.
+function addChain(torso, { y, z, r }) {
+  const gold = new THREE.MeshLambertMaterial({ color: 0xffc23a, emissive: 0x5a3400, flatShading: true });
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(r, 0.022, 4, 14), gold);
+  loop.position.set(0, y, z);
+  loop.rotation.x = 1.2;           // mostly flat round the neck, dipping at the front
+  torso.add(loop);
+  const pivot = new THREE.Group();
+  pivot.position.set(0, y - r * 0.4, z - r * 0.95);
+  const medal = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 8), gold);
+  medal.rotation.x = Math.PI / 2;
+  medal.position.y = -0.08;
+  pivot.add(medal);
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.03, 0), new THREE.MeshBasicMaterial({ color: 0xff2a14 }));
+  gem.position.set(0, -0.08, -0.015);
+  pivot.add(gem);
+  torso.add(pivot);
+  return pivot;
+}
+
 // A limb pivots at its top, so rotation.x swings it like a leg or an arm.
 function limb(w, h, d, mat, x, y, z) {
   const pivot = new THREE.Group();
@@ -89,7 +109,8 @@ function buildBrute() {
   armR.add(box(0.28, 0.22, 0.3, fur, 0, -0.1, 0));
   torso.add(armL, armR);
   torso.rotation.x = -0.28;                                      // hunched
-  return { root, hips, torso, head, legL, legR, armL, armR, eye };
+  const medal = addChain(torso, { y: 0.84, z: -0.04, r: 0.26 });
+  return { root, hips, torso, head, legL, legR, armL, armR, eye, medal };
 }
 
 function buildStalker() {
@@ -130,7 +151,8 @@ function buildStalker() {
   torso.add(armL, armR);
   torso.rotation.x = -0.42;                                      // stalking crouch
   hips.position.y = 0.82;
-  return { root, hips, torso, head, legL, legR, armL, armR, eye };
+  const medal = addChain(torso, { y: 0.8, z: -0.02, r: 0.19 });
+  return { root, hips, torso, head, legL, legR, armL, armR, eye, medal };
 }
 
 export function createCharacter(type) {
@@ -156,7 +178,7 @@ export function createCharacter(type) {
   return {
     group: rig.root,
     rig,
-    /** pose: { vx, vz, yaw, pitch, crouch, slide, ground, weapon, hasSpear } */
+    /** pose: { vx, vz, yaw, pitch, crouch, slide, ground, weapon, hasSpear, charge } */
     update(pose, dt) {
       rig.root.rotation.y = pose.yaw;
       const speed = Math.hypot(pose.vx || 0, pose.vz || 0);
@@ -175,6 +197,8 @@ export function createCharacter(type) {
       }
       // Arms come up to ready the current weapon.
       if (pose.weapon === 'spear' && pose.hasSpear) armB = 1.2;
+      // Winding up a throw: the arm cocks back over the shoulder. This is the tell.
+      if (pose.charge && pose.hasSpear) armB = -2.5;
       if (pose.weapon === 'sling') armA = 1.1;
       // Keep the head level in the world, then tilt it partway toward the aim.
       headPitch = (pose.pitch || 0) * 0.6 - lean;
@@ -187,6 +211,9 @@ export function createCharacter(type) {
       rig.armL.rotation.x += (armA - rig.armL.rotation.x) * k;
       rig.armR.rotation.x += (armB - rig.armR.rotation.x) * k;
       rig.head.rotation.x += (headPitch - rig.head.rotation.x) * k;
+      // Medallion bounces off the chest with the stride and lifts in a slide or jump
+      const swingTarget = pose.slide ? 1.1 : !pose.ground ? 0.7 : (0.5 + 0.5 * Math.sin(phase * 2)) * 0.5 * swing;
+      rig.medal.rotation.x += (swingTarget - rig.medal.rotation.x) * Math.min(1, dt * 9);
       spear.visible = !!pose.hasSpear;
       sling.visible = pose.weapon === 'sling';
     },

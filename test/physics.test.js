@@ -21,18 +21,20 @@ test('lands on the floor and stays grounded', () => {
   assert.ok(Math.abs(s.y) < 0.01, `y=${s.y}`);
 });
 
-test('running tops out at RUN_SPEED on the ground', () => {
+test('walking tops out at WALK_SPEED, sprinting at RUN_SPEED', () => {
   const s = createPlayerState([0, 0, 0]);
   run(s, {}, 0.2);
   run(s, { fwd: 1 }, 2);
-  assert.ok(Math.abs(hspeed(s) - C.RUN_SPEED) < 0.3, `speed=${hspeed(s)}`);
+  assert.ok(Math.abs(hspeed(s) - C.WALK_SPEED) < 0.3, `walk=${hspeed(s)}`);
   assert.ok(s.z < -5, 'yaw 0 moves toward -Z');
+  run(s, { fwd: 1, sprint: true }, 2);
+  assert.ok(Math.abs(hspeed(s) - C.RUN_SPEED) < 0.3, `sprint=${hspeed(s)}`);
 });
 
 test('slide boosts to SLIDE_SPEED and holds most of it', () => {
   const s = createPlayerState([0, 0, 0]);
   run(s, {}, 0.2);
-  run(s, { fwd: 1 }, 1);
+  run(s, { fwd: 1, sprint: true }, 1);
   const ev = run(s, { fwd: 1, crouch: true }, 1 / 60);
   assert.ok(ev.some((e) => e.slid));
   assert.ok(s.sliding);
@@ -45,7 +47,7 @@ test('slide boosts to SLIDE_SPEED and holds most of it', () => {
 test('slide-jump chain keeps speed well above running', () => {
   const s = createPlayerState([0, 0, 0]);
   run(s, {}, 0.2);
-  run(s, { fwd: 1 }, 0.6);
+  run(s, { fwd: 1, sprint: true }, 0.6);
   // Slide, then hop repeatedly while keeping crouch held: land -> slide -> jump.
   for (let i = 0; i < 6; i++) {
     run(s, { fwd: 1, crouch: true }, 0.1);
@@ -94,7 +96,7 @@ test('walls stop you and you slide along them', () => {
   const wall = [...flat, { min: [-10, 0, -3], max: [10, 5, -2] }];
   const s = createPlayerState([0, 0, 0]);
   run(s, {}, 0.2, wall);
-  run(s, { fwd: 1, strafe: 1 }, 1, wall);
+  run(s, { fwd: 1, strafe: 1, sprint: true }, 1, wall);
   assert.ok(s.z > -2 + C.PLAYER_HALF_WIDTH - 0.01, `z=${s.z}`);
   assert.ok(s.x > 3, 'kept moving along the wall');
 });
@@ -103,7 +105,7 @@ test('small ledges are stepped up automatically', () => {
   const step = [...flat, { min: [-5, 0, -8], max: [5, 0.4, -3] }];
   const s = createPlayerState([0, 0, 0]);
   run(s, {}, 0.2, step);
-  run(s, { fwd: 1 }, 0.6, step);
+  run(s, { fwd: 1, sprint: true }, 0.6, step);
   assert.ok(s.z < -4, `z=${s.z}`);
   assert.ok(Math.abs(s.y - 0.4) < 0.02, `y=${s.y}`);
 });

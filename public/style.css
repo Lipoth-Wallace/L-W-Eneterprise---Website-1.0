@@ -157,3 +157,53 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
   .weapon { min-width: 150px; }
   #feed { display: none; }
 }
+
+/* ---------- Practice HUD ---------- */
+#practice-hud { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: stretch; }
+.pr-cell { display: flex; align-items: baseline; gap: 8px; background: var(--panel); border: 2px solid var(--line); padding: 4px 10px; }
+.pr-cell span { font-size: 10px; color: var(--dim); }
+.pr-cell b { font-size: 24px; color: var(--bone); min-width: 4ch; text-align: right; }
+.pr-cell b.running { color: var(--ember); }
+.pr-cell small { font-size: 10px; color: var(--dim); }
+.pr-help { align-self: center; font-size: 10px; color: var(--dim); }
+#crosshair.charged i { background: var(--blood); box-shadow: 0 0 4px var(--blood); }
+
+.pause-buttons { display: flex; gap: 10px; justify-content: center; }
+.now-playing { margin: 0; font-size: 16px; color: var(--dim); min-height: 1.2em; }
+
+/* ---------- Settings panel ---------- */
+#settings { position: fixed; inset: 0; z-index: 20; background: rgba(4, 1, 1, 0.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.settings-box {
+  width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: #120505; border: 2px solid var(--line); box-shadow: 6px 6px 0 #000; padding: 16px 18px 20px;
+}
+.settings-head { display: flex; justify-content: space-between; align-items: center; }
+.settings-head h2 { margin: 0; font-family: var(--pixel); color: var(--blood); letter-spacing: 4px; font-size: 22px; }
+.tabs { display: flex; gap: 6px; margin: 14px 0 16px; border-bottom: 2px solid var(--line); }
+.tabs button {
+  font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; text-transform: uppercase;
+  background: transparent; color: var(--dim); border: 0; border-bottom: 3px solid transparent;
+  padding: 8px 12px; cursor: pointer; margin-bottom: -2px;
+}
+.tabs button.active { color: var(--bone); border-bottom-color: var(--blood); }
+.settings-box section { display: flex; flex-direction: column; gap: 10px; }
+.settings-box .field.row span { width: 150px; }
+.check { display: flex; gap: 10px; align-items: flex-start; color: var(--dim); cursor: pointer; }
+.check input { accent-color: var(--blood); width: 18px; height: 18px; margin-top: 3px; flex: none; }
+.check b { color: var(--bone); font-weight: normal; }
+.settings-box .dim { color: var(--dim); margin: 0; }
+.warn { color: var(--ember); margin: 0; font-size: 18px; }
+#bind-list { display: flex; flex-direction: column; gap: 4px; }
+.bind-row { display: grid; grid-template-columns: 1fr 120px 120px; gap: 6px; align-items: center; color: var(--text); }
+.bind {
+  font-family: var(--pixel); font-size: 11px; letter-spacing: 1px; color: var(--bone);
+  background: #1e0806; border: 2px solid var(--line); padding: 6px 4px; cursor: pointer;
+}
+.bind:hover { border-color: var(--blood); }
+.bind.listening { border-color: var(--ember); color: var(--ember); animation: blink 0.8s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.5; } }
+#mixer { display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 560px) {
+  .bind-row { grid-template-columns: 1fr 90px 90px; }
+  .settings-box .field.row span { width: 100px; }
+}

@@ -3,7 +3,7 @@
 
 import * as C from '../shared/constants.js';
 import { MAP } from '../shared/map.js';
-import { rayMap, rayBox, playerHitbox, normalize, spearRestPoint } from '../shared/raycast.js';
+import { rayMap, rayBox, playerHitbox, hitboxBonus, normalize, spearRestPoint } from '../shared/raycast.js';
 
 const HISTORY_SECONDS = 1;
 const MAX_REPORTED_SPEED = C.MAX_SPEED * 1.35 + 4;   // generous: jitter bunches packets up
@@ -42,6 +42,7 @@ export class Room {
       lastStateAt: 0,
       history: [],
       nextStab: 0, nextThrow: 0, nextSling: 0,
+      charging: false, chargeAt: 0,
       spear: { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 },
       spawnSeq: 0,
     };
@@ -86,6 +87,7 @@ export class Room {
     p.weapon = 'spear';
     p.spear = { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 };
     p.nextStab = p.nextThrow = p.nextSling = t;
+    p.charging = false;
     p.history = [];
     p.spawnSeq++;
     p.lastStateAt = t;
@@ -139,6 +141,15 @@ export class Room {
     this.record(p, t);
   }
 
+  // Holding RMB winds the spear back. Opponents see it (the tell), and the
+  // throw only counts once the windup is complete.
+  handleCharge(p, m) {
+    if (!p.alive || p.spear.state !== 'held') return;
+    const on = !!m.on;
+    if (on && !p.charging) p.chargeAt = this.now();
+    p.charging = on;
+  }
+
   // weapon: 'stab' | 'throw' | 'sling'. The origin is the shooter's eye as the
   // client saw it; `time` is the server time of the remote pose they aimed at.
   handleFire(p, m) {
@@ -146,7 +157,8 @@ export class Room {
     if (!p.alive) return;
     const kind = m.weapon;
     if (kind === 'stab' && (p.spear.state !== 'held' || t < p.nextStab)) return;
-    if (kind === 'throw' && (p.spear.state !== 'held' || t < p.nextThrow)) return;
+    if (kind === 'throw' && (p.spear.state !== 'held' || t < p.nextThrow || !p.charging ||
+        t - p.chargeAt < C.SPEAR_WINDUP - C.WINDUP_TOLERANCE)) return;
     if (kind === 'sling' && t < p.nextSling) return;
     if (kind !== 'stab' && kind !== 'throw' && kind !== 'sling') return;
 
@@ -158,7 +170,7 @@ export class Room {
     d = normalize(d);
 
     if (kind === 'stab') p.nextStab = t + C.STAB_COOLDOWN;
-    if (kind === 'throw') p.nextThrow = t + C.THROW_COOLDOWN;
+    if (kind === 'throw') { p.nextThrow = t + C.THROW_COOLDOWN; p.charging = false; }
     if (kind === 'sling') p.nextSling = t + C.SLING_RELOAD;
     p.protectedUntil = 0;   // attacking ends spawn protection
 
@@ -169,7 +181,7 @@ export class Room {
     if (foe && foe.alive && t >= foe.protectedUntil) {
       const rewind = Math.max(t - C.LAG_COMP_MAX, Math.min(t, +m.time || t));
       const pose = this.positionAt(foe, rewind);
-      const hb = playerHitbox(pose.x, pose.y, pose.z, pose.crouching, kind === 'stab' ? C.STAB_HITBOX_BONUS : 0);
+      const hb = playerHitbox(pose.x, pose.y, pose.z, pose.crouching, hitboxBonus(kind));
       foeT = rayBox(o, d, hb.min, hb.max, range);
       hitFoe = foeT < wall.t;
     }
@@ -240,6 +252,7 @@ export class Room {
         sp: p.spear.state === 'held' ? null : { p: p.spear.p.map((v) => round(v)), d: p.spear.dir.map((v) => round(v)) },
         rl: round(Math.max(0, p.nextSling - t)),
         pr: t < p.protectedUntil ? 1 : 0,
+        ch: p.charging ? 1 : 0,
       });
     }
     const snap = { t: 'snap', time: t, players, ev: this.events, over: this.matchOverAt ? round(this.matchOverAt - t) : 0, winner: this.winner };

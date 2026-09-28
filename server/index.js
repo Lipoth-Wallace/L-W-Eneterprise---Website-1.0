@@ -81,6 +81,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       if (!room || !player) return;
       if (m.t === 'state') room.handleState(player, m);
       else if (m.t === 'fire') room.handleFire(player, m);
+      else if (m.t === 'charge') room.handleCharge(player, m);
       else if (m.t === 'ping') send({ t: 'pong', c: m.c, time: room.now() });
     });
 
