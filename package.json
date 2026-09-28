@@ -1,0 +1,21 @@
+{
+  "name": "bloodflint",
+  "version": "0.1.0",
+  "private": true,
+  "description": "1v1 online caveman arena shooter: spear, sling, slide-jump movement.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "three": "^0.186.1",
+    "ws": "^8.22.0"
+  }
+}

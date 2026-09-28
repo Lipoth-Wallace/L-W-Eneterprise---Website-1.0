@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bloodflint</title>
+  <meta name="description" content="1v1 caveman arena. Spear and sling. Slide, jump, kill.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- In-game HUD -->
+  <div id="hud" hidden>
+    <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+    <div id="hitmarker"></div>
+    <div id="scoreboard">
+      <div class="side me"><span id="name-me">YOU</span><b id="score-me">0</b></div>
+      <div class="goal">FIRST TO <span id="goal">10</span></div>
+      <div class="side foe"><b id="score-foe">0</b><span id="name-foe">—</span></div>
+    </div>
+    <div id="feed"></div>
+    <div id="center">
+      <div id="center-msg"></div>
+      <div id="center-sub"></div>
+    </div>
+    <div id="spear-marker" hidden><span>▼</span><small id="spear-dist"></small></div>
+    <div id="bottom-left">
+      <div id="room-info"></div>
+      <div id="ping"></div>
+    </div>
+    <div id="speed"><b id="speed-val">0</b><small>SPD</small></div>
+    <div id="weapons">
+      <div class="weapon" id="w-spear"><span class="key">1</span><span class="label">SPEAR</span><span class="state" id="spear-state">HELD</span></div>
+      <div class="weapon" id="w-sling"><span class="key">2</span><span class="label">SLING</span><span class="bar"><i id="sling-bar"></i></span></div>
+    </div>
+    <div id="pause" hidden>
+      <div class="pause-box">
+        <h2>PAUSED</h2>
+        <p>Click to fight</p>
+        <p class="dim">The match keeps running while you're paused.</p>
+        <button id="leave-btn" class="btn ghost">Leave match</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu -->
+  <div id="menu">
+    <div class="menu-inner">
+      <header>
+        <h1>BLOOD<span>FLINT</span></h1>
+        <p class="tag">1v1 · SPEAR &amp; SLING · ONE HIT KILLS</p>
+      </header>
+
+      <section class="pick">
+        <div class="preview-wrap">
+          <canvas id="preview"></canvas>
+          <div class="char-name" id="char-name">GRUK</div>
+          <div class="char-title" id="char-title">The Brute</div>
+          <p class="char-blurb" id="char-blurb"></p>
+          <div class="char-switch">
+            <button class="btn small" data-char="brute">GRUK</button>
+            <button class="btn small" data-char="stalker">VESH</button>
+          </div>
+        </div>
+
+        <div class="controls-col">
+          <label class="field">
+            <span>Name</span>
+            <input id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Caveman">
+          </label>
+          <button id="quick" class="btn primary">Quick match</button>
+          <button id="create" class="btn">Private room</button>
+          <div class="join-row">
+            <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false">
+            <button id="join" class="btn">Join</button>
+          </div>
+          <p id="menu-error" class="error" role="alert"></p>
+
+          <details class="settings">
+            <summary>Settings</summary>
+            <label class="field row"><span>Sensitivity</span><input id="sens" type="range" min="0.2" max="4" step="0.05" value="1"><output id="sens-out">1.00</output></label>
+            <label class="field row"><span>Field of view</span><input id="fov" type="range" min="80" max="120" step="1" value="100"><output id="fov-out">100</output></label>
+            <label class="field row"><span>Volume</span><input id="vol" type="range" min="0" max="1" step="0.05" value="0.7"><output id="vol-out">70</output></label>
+            <label class="field row"><span>Pixels</span>
+              <select id="res">
+                <option value="180">Crunchy (180p)</option>
+                <option value="270" selected>Low (270p)</option>
+                <option value="360">Clean (360p)</option>
+              </select>
+            </label>
+          </details>
+        </div>
+      </section>
+
+      <section class="how">
+        <div><kbd>WASD</kbd> move</div>
+        <div><kbd>SPACE</kbd> jump (hold to hop)</div>
+        <div><kbd>SHIFT</kbd>/<kbd>C</kbd> slide</div>
+        <div><kbd>LMB</kbd> stab / sling</div>
+        <div><kbd>RMB</kbd> throw spear</div>
+        <div><kbd>F</kbd> quick stab</div>
+        <div><kbd>Q</kbd>/<kbd>1</kbd><kbd>2</kbd>/wheel swap</div>
+        <div class="tip">Slide, jump out of it, land still crouching: chain it. Strafe in the air to go faster. Walk over a thrown spear to pick it back up.</div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
