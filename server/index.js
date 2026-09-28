@@ -6,6 +6,7 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 import { WebSocketServer } from 'ws';
 import { Room } from './room.js';
 import { SNAPSHOT_RATE } from '../shared/constants.js';
@@ -103,6 +104,12 @@ export function startServer({ port = PORT, log = console.log } = {}) {
     server.listen(port, () => {
       const actual = server.address().port;
       log(`Bloodflint listening on http://localhost:${actual}`);
+      // Addresses other devices on the same Wi-Fi can use to join.
+      for (const nets of Object.values(os.networkInterfaces())) {
+        for (const n of nets || []) {
+          if (n.family === 'IPv4' && !n.internal) log(`  same network: http://${n.address}:${actual}`);
+        }
+      }
       resolve({
         port: actual,
         rooms,

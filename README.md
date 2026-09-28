@@ -11,6 +11,11 @@ npm start          # http://localhost:3000
 npm test           # physics, combat and map tests
 ```
 
+On Windows you can double-click `start-windows.bat` instead. It installs
+dependencies on the first run, starts the server and opens your browser. The
+server window also lists a `same network:` address that other devices on your
+Wi-Fi can use to join.
+
 Open two browser windows. In the first, click **Private room**. In the second,
 type the four-letter code and click **Join**. **Quick match** pairs you with
 anyone else who is waiting.
