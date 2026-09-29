@@ -89,7 +89,7 @@ export const RELIC_LEAD = 2.6;          // length of the lead it's dragged on
 // RELIC_FUSE_GRACE seconds to get back up to speed, or the skull bursts and
 // kills you (it drops where you die). The carry penalty puts a sprint under
 // the line, so a carrier has to chain slides and hops.
-export const RELIC_FUSE = 18;
+export const RELIC_FUSE = 45;
 export const RELIC_FUSE_SPEED = 10;
 export const RELIC_FUSE_GRACE = 3;
 export const RELIC_FUSE_EXPLODES_AT_END = false;   // true: the fuse running out kills you too

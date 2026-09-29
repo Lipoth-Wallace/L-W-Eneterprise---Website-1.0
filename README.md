@@ -118,12 +118,12 @@ at speed.
   score, but killing the carrier makes them drop the skull where they fell,
   and anyone can grab it. A skull nobody touches for 25 s goes back to the
   crater.
-- **The fuse.** For 18 s after you take the skull you must keep moving at
+- **The fuse.** For 45 s after you take the skull you must keep moving at
   **10 m/s or more**. Drop under it and a red countdown gives you 3 s to get
   back up to speed, or the skull bursts and kills you (it drops where you
   die). Dragging it costs speed, so a sprint alone won't cut it: chain slides
   and hops. Everyone sees the fuse; your opponent also sees when you're
-  slowing. After 18 s the fuse is spent and you can walk (flip
+  slowing. After 45 s the fuse is spent and you can walk (flip
   `RELIC_FUSE_EXPLODES_AT_END` in `shared/constants.js` to make it burst
   instead).
 - **Launch pads** throw you up at a fixed speed along the way you were
