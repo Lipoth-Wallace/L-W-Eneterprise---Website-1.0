@@ -107,3 +107,48 @@ test('running into the round terrace turns you along it instead of stopping you'
   assert.ok(minR > 45, `went inside the terrace wall (r=${minR.toFixed(2)})`);
   assert.ok(s.z > 22 && Math.hypot(s.vx, s.vz) > 4, `stalled at x=${s.x.toFixed(1)} z=${s.z.toFixed(1)}`);
 });
+
+function slideStairs(start, yaw) {
+  const s = createPlayerState(start, yaw);
+  for (let i = 0; i < 30; i++) stepPlayer(s, { yaw, pitch: 0 }, DT, V.boxes);
+  let airborne = 0;
+  for (let i = 0; i < 1.2 / DT; i++) {
+    stepPlayer(s, { yaw, pitch: 0, fwd: 1, sprint: true, crouch: i > 3 }, DT, V.boxes);
+    if (!s.onGround) airborne++;
+  }
+  return { s, airborne };
+}
+
+test('a slide climbs a full flight of stairs, but slower than on the flat', () => {
+  const WEST = Math.PI / 2;
+  const up = slideStairs([58, 0, 0], WEST).s;         // east stairs, heading in
+  const flat = slideStairs([58, 0, 30], WEST).s;      // same run, open ground
+  assert.ok(up.y > 3.9, `stopped at y=${up.y.toFixed(2)}`);
+  assert.ok(up.sliding, 'the slide died on the stairs');
+  assert.ok(Math.hypot(up.vx, up.vz) < Math.hypot(flat.vx, flat.vz) - 2);
+});
+
+test('a slide down stairs hugs the steps and speeds up', () => {
+  const EAST = -Math.PI / 2;
+  const { s, airborne } = slideStairs([38, 4, 0], EAST);
+  const flat = slideStairs([38, 0, 70], EAST).s;
+  assert.equal(airborne, 0, 'left the ground on the way down');
+  assert.ok(Math.hypot(s.vx, s.vz) > Math.hypot(flat.vx, flat.vz) + 1.5);
+});
+
+test('a launch pad keeps your heading: cross it sideways and it throws you sideways', () => {
+  const pad = V.pads.find((p) => p.max[1] === 0 && p.min[0] > 0 && p.min[2] > 0);
+  const c = [(pad.min[0] + pad.max[0]) / 2, 0, (pad.min[2] + pad.max[2]) / 2];
+  // Run across it heading +Z (yaw pi faces +Z), from 5 m before it
+  const s = createPlayerState([c[0], 0, c[2] - 5], Math.PI);
+  for (let i = 0; i < 30; i++) stepPlayer(s, { yaw: Math.PI, pitch: 0 }, DT, V.boxes, V.pads);
+  let launched = null;
+  for (let i = 0; i < 2 / DT && !launched; i++) {
+    const e = stepPlayer(s, { yaw: Math.PI, pitch: 0, fwd: 1, sprint: true }, DT, V.boxes, V.pads);
+    if (e.launched) launched = { vx: s.vx, vy: s.vy, vz: s.vz };
+  }
+  assert.ok(launched, 'never launched');
+  const speed = Math.hypot(pad.v[0], pad.v[2]);
+  assert.ok(Math.abs(launched.vx) < 0.5 && Math.abs(launched.vz - speed) < 0.5, JSON.stringify(launched));
+  assert.equal(launched.vy, pad.v[1]);
+});

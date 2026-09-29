@@ -108,3 +108,52 @@ test('the snapshot carries the relic state and teams', () => {
   assert.equal(snap.relic.by, a.id);
   assert.deepEqual(snap.players.map((p) => p.tm).sort(), [0, 1]);
 });
+
+// Take the skull, then report states at 30 Hz with speed v for `seconds`
+function carryAt(room, p, v, seconds, clockRef) {
+  for (let i = 0; i < seconds * 30; i++) {
+    clockRef.advance(1 / 30);
+    if (!p.alive) return;
+    room.handleState(p, { seq: p.spawnSeq, p: [p.x + v / 30, p.y, p.z], yaw: 0, pitch: 0, v: [v, 0, 0] });
+  }
+}
+
+test('the fuse: a carrier who stays at speed survives it', () => {
+  const s = setup();
+  s.move(s.a, [0.5, 8, 0]);
+  s.room.handleState(s.a, { seq: s.a.spawnSeq, p: [0.5, 8, 0], yaw: 0, pitch: 0, v: [0, 0, 0] });
+  carryAt(s.room, s.a, 12, 1, s);             // gets up to speed within the grace
+  s.a.x = -60; s.a.y = 0; s.a.z = 30;           // somewhere open, away from the caves
+  carryAt(s.room, s.a, 12, C.RELIC_FUSE, s);
+  assert.ok(s.a.alive);
+  assert.equal(s.room.relic.by, s.a.id);
+  assert.equal(s.room.snapshot().relic.fz, undefined, 'the fuse should have run out');
+});
+
+test('the fuse: too slow for the grace period and the skull bursts, killing the carrier', () => {
+  const s = setup();
+  s.move(s.a, [0.5, 8, 0]);
+  s.room.handleState(s.a, { seq: s.a.spawnSeq, p: [0.5, 8, 0], yaw: 0, pitch: 0, v: [0, 0, 0] });
+  s.events = events(s.room);
+  carryAt(s.room, s.a, 6, C.RELIC_FUSE_GRACE - 0.3, s);
+  assert.ok(s.a.alive, 'burst before the grace ran out');
+  assert.ok(s.room.snapshot().relic.bm > 0);
+  carryAt(s.room, s.a, 6, 0.6, s);
+  assert.ok(!s.a.alive, 'survived past the grace');
+  assert.equal(s.room.relic.state, 'dropped');
+  const ev = events(s.room);
+  assert.ok(ev.some((e) => e.e === 'relic' && e.what === 'burst'));
+  assert.ok(ev.some((e) => e.e === 'kill' && e.w === 'skull' && e.victim === s.a.id));
+  assert.equal(s.a.kills, 0);
+});
+
+test('the fuse: getting back up to speed within the grace resets it', () => {
+  const s = setup();
+  s.move(s.a, [0.5, 8, 0]);
+  s.room.handleState(s.a, { seq: s.a.spawnSeq, p: [0.5, 8, 0], yaw: 0, pitch: 0, v: [0, 0, 0] });
+  s.a.x = -60; s.a.y = 0; s.a.z = 30;
+  carryAt(s.room, s.a, 5, 2.5, s);
+  carryAt(s.room, s.a, 14, 0.5, s);
+  carryAt(s.room, s.a, 5, 2.5, s);
+  assert.ok(s.a.alive);
+});

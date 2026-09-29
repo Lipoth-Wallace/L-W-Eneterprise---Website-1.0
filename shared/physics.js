@@ -69,6 +69,7 @@ function moveHorizontal(s, axis, delta, h, boxes) {
     if (s.onGround && rise > 0 && rise <= C.STEP_HEIGHT &&
         !overlapsAny(s.x, b.max[1] + 1e-4, s.z, h, boxes)) {
       s.y = b.max[1] + 1e-4;
+      if (s.sliding) scaleSpeedForHeight(s, -rise * C.SLIDE_STAIR_UP_COST);
       continue;
     }
     if (b.r !== undefined) {
@@ -87,6 +88,31 @@ function moveHorizontal(s, axis, delta, h, boxes) {
     else s[axis] = b.max[i] + r + 1e-4;
     if (axis === 'x') s.vx = 0; else s.vz = 0;
   }
+}
+
+// Trades height for horizontal speed: v^2 + 2 g dh (dh < 0 slows you down)
+function scaleSpeedForHeight(s, dh) {
+  const v = Math.hypot(s.vx, s.vz);
+  if (v < 1e-4) return;
+  const nv = Math.min(Math.sqrt(Math.max(0, v * v + 2 * C.GRAVITY * dh)), C.MAX_SPEED * (s.speedMult || 1));
+  s.vx *= nv / v;
+  s.vz *= nv / v;
+}
+
+// Highest floor under the player's footprint between their feet and maxDrop
+// below them, or null
+function floorBelow(x, y, z, maxDrop, boxes) {
+  const r = C.PLAYER_HALF_WIDTH;
+  let top = null;
+  for (const b of boxes) {
+    const t = b.max[1];
+    if (t > y + 1e-3 || t < y - maxDrop || (top !== null && t <= top)) continue;
+    const under = b.r !== undefined
+      ? Math.hypot(x - b.c[0], z - b.c[1]) < b.r + r
+      : x + r > b.min[0] && x - r < b.max[0] && z + r > b.min[2] && z - r < b.max[2];
+    if (under) top = t;
+  }
+  return top;
 }
 
 function moveVertical(s, delta, h, boxes) {
@@ -145,8 +171,9 @@ function startSlide(s, wx, wz, hasWish) {
  * Returns event flags for sounds and effects: { jumped, landed, slid }.
  */
 /**
- * pads: launch pads, [{ min, max, v: [vx, vy, vz] }]. Standing on one flings
- * you along v. input.speedMult (default 1) scales every top speed, e.g. 0.75
+ * pads: launch pads, [{ min, max, v: [vx, vy, vz] }]. Stepping on one throws
+ * you up at v's vertical speed and along your heading at v's horizontal speed
+ * (along v itself if you were standing still). input.speedMult (default 1) scales every top speed, e.g. 0.75
  * while dragging the relic.
  */
 export function stepPlayer(s, input, dt, boxes = MAP.boxes, pads = null) {
@@ -248,7 +275,18 @@ function substep(s, input, dt, boxes, pads) {
   const wasOnGround = s.onGround;
   moveHorizontal(s, 'x', s.vx * dt, h, boxes);
   moveHorizontal(s, 'z', s.vz * dt, h, boxes);
-  const landed = moveVertical(s, s.vy * dt, h, boxes);
+  const wasSliding = s.sliding;
+  let landed = moveVertical(s, s.vy * dt, h, boxes);
+  // Sliding off a step: stay on the stairs and gain speed for the drop
+  if (!landed && wasOnGround && wasSliding && !wantJump && s.vy <= 0) {
+    const floor = floorBelow(s.x, s.y, s.z, C.STEP_HEIGHT + 0.05, boxes);
+    if (floor !== null) {
+      scaleSpeedForHeight(s, (s.y - floor) * C.SLIDE_STAIR_DOWN_GAIN);
+      s.y = floor + 1e-4;
+      s.vy = 0;
+      landed = true;
+    }
+  }
   s.onGround = landed;
   if (s.onGround && !wasOnGround) {
     s.justLanded = true;
@@ -261,7 +299,13 @@ function substep(s, input, dt, boxes, pads) {
   if (pads && s.onGround) {
     for (const p of pads) {
       if (s.x >= p.min[0] && s.x <= p.max[0] && s.z >= p.min[2] && s.z <= p.max[2] && Math.abs(s.y - p.max[1]) < 0.3) {
-        s.vx = p.v[0]; s.vy = p.v[1]; s.vz = p.v[2];
+        // A fixed launch speed, but along your own heading: the pad bounces
+        // you up and on the way you came in. Standing still, it uses its
+        // default direction (p.v).
+        const along = Math.hypot(p.v[0], p.v[2]), hs = Math.hypot(s.vx, s.vz);
+        const dx = hs > 1 ? s.vx / hs : p.v[0] / (along || 1);
+        const dz = hs > 1 ? s.vz / hs : p.v[2] / (along || 1);
+        s.vx = dx * along; s.vy = p.v[1]; s.vz = dz * along;
         s.onGround = false;
         s.sliding = false;
         events.launched = true;

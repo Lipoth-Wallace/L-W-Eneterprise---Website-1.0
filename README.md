@@ -49,10 +49,12 @@ fullscreen.
   fatter hitbox than the sling (+0.45 m on every side) but costs you the
   spear until you walk over it. A spear that lands somewhere you can't reach
   flies back after 15 s. The server enforces the windup.
-- **Sling:** hitscan with an exact hitbox and a 1.25 s reload.
+- **Sling:** hitscan with an exact hitbox and a 0.8 s reload.
 - **Movement:** a slide boosts you to at least 16 m/s and holds its speed.
   Jumping out of a slide keeps that speed. Landing with crouch still held
-  drops you into another slide. Air strafing adds speed. The jump is low
+  drops you into another slide. Sliding carries you up stairs, but each
+  step costs some speed. Sliding down stairs hugs the steps and speeds you
+  up. Air strafing adds speed. The jump is low
   (about 1.3 m).
 
 ## Seeing in the dark: the scan
@@ -116,6 +118,17 @@ at speed.
   score, but killing the carrier makes them drop the skull where they fell,
   and anyone can grab it. A skull nobody touches for 25 s goes back to the
   crater.
+- **The fuse.** For 18 s after you take the skull you must keep moving at
+  **10 m/s or more**. Drop under it and a red countdown gives you 3 s to get
+  back up to speed, or the skull bursts and kills you (it drops where you
+  die). Dragging it costs speed, so a sprint alone won't cut it: chain slides
+  and hops. Everyone sees the fuse; your opponent also sees when you're
+  slowing. After 18 s the fuse is spent and you can walk (flip
+  `RELIC_FUSE_EXPLODES_AT_END` in `shared/constants.js` to make it burst
+  instead).
+- **Launch pads** throw you up at a fixed speed along the way you were
+  heading when you hit them; stand still on one and it throws you up to the
+  next tier.
 - An enemy scan shows the skull carrier as a **dark red** ghost and mist
   instead of amber.
 - The volcano has four levels: the plains, two round terraces and the

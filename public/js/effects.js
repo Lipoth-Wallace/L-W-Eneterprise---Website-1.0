@@ -129,6 +129,19 @@ export function createEffects(scene, map) {
           { life: 5, size: 0.12, color: 0xcfc0a2, stick: true });
       }
     },
+    // The skull bursting: a fireball of embers and bone, then the gore
+    explosion(point) {
+      const p = new THREE.Vector3(...point).add(new THREE.Vector3(0, 1, 0));
+      for (let i = 0; i < 90; i++) {
+        const v = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8 + 0.1, Math.random() - 0.5).normalize().multiplyScalar(4 + Math.random() * 12);
+        const hot = Math.random();
+        emit(p.clone(), v, { life: 0.5 + Math.random() * 0.9, size: 0.12 + Math.random() * 0.2, grav: 4, color: hot < 0.4 ? 0xffd070 : hot < 0.8 ? 0xff6a1a : 0x2a1a16 });
+      }
+      for (let i = 0; i < 14; i++) {
+        emit(p.clone(), new THREE.Vector3(Math.random() - 0.5, Math.random() + 0.3, Math.random() - 0.5).multiplyScalar(10),
+          { life: 6, size: 0.14, color: 0xe0d4ba, stick: true });
+      }
+    },
     slideSparks(pos, vel) {
       if (Math.random() < 0.5) {
         emit(pos, new THREE.Vector3(-vel.x * 0.1 + (Math.random() - 0.5), 1 + Math.random() * 1.5, -vel.z * 0.1 + (Math.random() - 0.5)),

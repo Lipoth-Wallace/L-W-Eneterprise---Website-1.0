@@ -20,6 +20,10 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import * as C from '/shared/constants.js';
 import { rayMap } from '/shared/raycast.js';
 
+// Its WebAssembly may be blocked by a page's security policy; the offline
+// page ships an uncompressed model that doesn't need it, so don't complain
+MeshoptDecoder.ready.catch(() => {});
+
 const HEIGHT = 2.2;   // metres, crown to jaw: a skull for something enormous
 
 // Orientation of the scan: turn it so the face looks down -Z and the crown up.
@@ -69,7 +73,7 @@ export function createSkull(worldScene, renderer) {
   let loaded = false;
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
-  loader.load(skullUrl(), (gltf) => {
+  const onLoad = (gltf) => {
     const model = gltf.scene;
     model.traverse((o) => {
       if (!o.isMesh) return;
@@ -88,7 +92,39 @@ export function createSkull(worldScene, renderer) {
     pivot.position.set(-mid.x, -box.min.y, -mid.z);
     holder.add(pivot);
     loaded = true;
-  }, undefined, (err) => console.warn('skull failed to load', err));
+  };
+  // If the scan can't load, show a plain bone lump rather than nothing: the
+  // objective must never be invisible
+  const onError = (err) => {
+    console.warn('skull failed to load', err);
+    const geo = new THREE.IcosahedronGeometry(HEIGHT * 0.45, 3);
+    geo.scale(0.85, 1, 1.1);
+    geo.translate(0, HEIGHT * 0.45, 0);
+    holder.add(new THREE.Mesh(geo, bone));
+    loaded = true;
+  };
+  // Offline page: the occlusion map comes separately, as a plain image
+  if (globalThis.BLOODFLINT_SKULL_AO) {
+    new THREE.TextureLoader().load(globalThis.BLOODFLINT_SKULL_AO, (ao) => {
+      ao.flipY = false;
+      ao.colorSpace = THREE.NoColorSpace;
+      bone.aoMap = ao;
+      bone.needsUpdate = true;
+    });
+  }
+  const url = skullUrl();
+  if (url.startsWith('data:')) {
+    // Inlined (offline page): decode it here, since a page's security policy
+    // may block fetching data: URLs
+    try {
+      const bin = atob(url.slice(url.indexOf(',') + 1));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      loader.parse(bytes.buffer, '', onLoad, onError);
+    } catch (err) { onError(err); }
+  } else {
+    loader.load(url, onLoad, undefined, onError);
+  }
 
   // The lead: a sagging rope from the carrier's hand, part of the low-res world
   const ropePts = new Float32Array(16 * 3);

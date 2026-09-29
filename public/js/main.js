@@ -23,7 +23,7 @@ import { createSkull } from './skull.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const PHYS_DT = 1 / 120;
-const VERBS = { stab: 'gutted', throw: 'skewered', sling: 'stoned' };
+const VERBS = { stab: 'gutted', throw: 'skewered', sling: 'stoned', skull: 'burst' };
 const BOT_RESPAWN = 1.5;
 
 let renderer, post, camera;
@@ -407,7 +407,22 @@ function onEvent(ev) {
         dir = [dx / l, 0.2, dz / l];
       }
       effects.blood(ev.at, dir);
-      if (ev.killer === me) {
+      if (ev.w === 'skull') {
+        // The skull's fuse: nobody gets the credit
+        if (ev.victim === me) {
+          game.alive = false;
+          game.deathAt = nowS();
+          game.killerId = null;
+          game.deathPos = [game.local.x, game.local.y + game.eyeH, game.local.z];
+          game.hurt = 1;
+          cancelCharge(false);
+          updateMuffle();
+          sfx.setSliding(false);
+          feed('THE SKULL BURST · YOU WERE TOO SLOW');
+        } else {
+          feed(`THE SKULL BURST · <b>${esc(victim)}</b> WAS TOO SLOW`);
+        }
+      } else if (ev.killer === me) {
         sfx.kill();
         chain.glint();
         showHitmarker();
@@ -463,6 +478,10 @@ function onEvent(ev) {
         sfx.relicScore(ev.id === me);
       } else if (ev.what === 'home') {
         feed('THE SKULL RETURNS TO THE CRATER');
+      } else if (ev.what === 'burst') {
+        const [dist, pan] = relAudio(ev.p);
+        effects.explosion(ev.p);
+        sfx.burst(dist, pan);
       }
       break;
     }
@@ -1107,8 +1126,8 @@ function updateHud(hs, t) {
       ? `Send this code: <code>${game.room}</code><br><small>${esc(link)}</small>`
       : `Searching… or invite a friend with code <code>${game.room}</code>`;
   } else if (!game.alive) {
-    msg = 'SLAIN';
-    sub = `by ${esc(game.names[game.killerId] || '???')} · rising in ${Math.max(0, game.respawnIn).toFixed(1)}`;
+    msg = game.killerId == null ? 'BLOWN APART' : 'SLAIN';
+    sub = `${game.killerId == null ? 'the skull burst' : `by ${esc(game.names[game.killerId] || '???')}`} · rising in ${Math.max(0, game.respawnIn).toFixed(1)}`;
   }
   setText('center-msg', msg);
   setHtml('center-sub', sub);
@@ -1128,6 +1147,28 @@ function updateHud(hs, t) {
       dropped: 'THE SKULL IS LOOSE',
       scored: 'SKULL DELIVERED',
     }[r.st] || '');
+  }
+  // The fuse: a countdown while it's live, and a red warning while the
+  // carrier is under speed
+  const fuse = $('relic-fuse');
+  const fz = relicOn && game.relic.st === 'carried' ? game.relic.fz : 0;
+  fuse.hidden = !fz;
+  if (fz) {
+    const bm = game.relic.bm;
+    const speed = Math.hypot(game.local.vx, game.local.vz);
+    fuse.classList.toggle('danger', bm != null);
+    if (mine) {
+      setHtml('relic-fuse', bm != null
+        ? `SPEED UP · <b>${bm.toFixed(1)}</b> · ${speed.toFixed(0)}/${C.RELIC_FUSE_SPEED} M/S`
+        : `FUSE ${fz.toFixed(1)} · KEEP ≥${C.RELIC_FUSE_SPEED} M/S · ${speed.toFixed(0)} M/S`);
+      // Tick faster as the burst gets closer
+      if (bm != null && game.alive) {
+        const urgency = 1 - bm / C.RELIC_FUSE_GRACE, gap = 0.5 - urgency * 0.38;
+        if (nowS() - (game.lastFuseTick || 0) > gap) { game.lastFuseTick = nowS(); sfx.fuseTick(urgency); }
+      }
+    } else {
+      setHtml('relic-fuse', bm != null ? `THE CARRIER IS SLOWING · <b>${bm.toFixed(1)}</b>` : `FUSE ${fz.toFixed(1)}`);
+    }
   }
   const skullPos = relicOn && !mine && game.relic.st !== 'scored' && skull ? skull.position.toArray() : null;
   placeMarker($('relic-marker'), 'relic-dist', game.alive ? skullPos : null, 2.2);

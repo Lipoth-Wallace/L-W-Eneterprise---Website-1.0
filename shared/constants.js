@@ -37,6 +37,12 @@ export const SLIDE_FRICTION = 0.5;        // low: a slide carries its speed (ULT
 export const SLIDE_STEER = 10;
 export const SLIDE_MIN_SPEED = 6;        // slide ends below this
 export const SLIDE_REBOOST_COOLDOWN = 0.7;
+// Stairs while sliding, as fractions of the energy of the height changed
+// (v^2 -/+ 2 g h k): going up each step costs some speed, so a slide carries
+// you up a flight but slower than on the flat; going down, the slide hugs the
+// steps instead of flying off them and picks up speed.
+export const SLIDE_STAIR_UP_COST = 0.3;
+export const SLIDE_STAIR_DOWN_GAIN = 1.4;
 export const SLIDE_JUMP_MULT = 1.08;     // jumping out of a slide keeps and adds speed
 export const MAX_SPEED = 26;             // hard horizontal cap
 export const JUMP_BUFFER = 0.12;
@@ -52,7 +58,7 @@ export const THROW_COOLDOWN = 0.35;
 export const SPEAR_WINDUP = 0.18;        // hold RMB this long before the throw is ready
 export const WINDUP_TOLERANCE = 0.06;    // server slack for packet jitter
 export const SLING_RANGE = 90;
-export const SLING_RELOAD = 1.25;
+export const SLING_RELOAD = 0.8;
 export const SPEAR_PICKUP_RADIUS = 1.5;
 export const SPEAR_RETURN_TIME = 15;     // an unreachable spear flies home after this
 
@@ -78,5 +84,14 @@ export const RELIC_CARRY_MULT = 0.75;   // dragging it costs 25% of your speed
 export const RELIC_RETURN = 25;         // a dropped skull no one touches goes back to the crater
 export const RELIC_RESET_DELAY = 3;     // after a capture, before it reappears
 export const RELIC_LEAD = 2.6;          // length of the lead it's dragged on
+// The fuse: for RELIC_FUSE seconds after you take the skull you must keep
+// moving at RELIC_FUSE_SPEED or more. Drop below it and you have
+// RELIC_FUSE_GRACE seconds to get back up to speed, or the skull bursts and
+// kills you (it drops where you die). The carry penalty puts a sprint under
+// the line, so a carrier has to chain slides and hops.
+export const RELIC_FUSE = 18;
+export const RELIC_FUSE_SPEED = 10;
+export const RELIC_FUSE_GRACE = 3;
+export const RELIC_FUSE_EXPLODES_AT_END = false;   // true: the fuse running out kills you too
 
 export const CHARACTERS = ['brute', 'stalker'];

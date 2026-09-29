@@ -246,7 +246,7 @@ export class Room {
     victim.spear = { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 };
     if (this.relic && this.relic.by === victim.id) this.dropRelic(victim);
     if (this.matchOverAt) return;
-    killer.kills++;
+    if (killer !== victim) killer.kills++;
     this.pushEvent({ e: 'kill', killer: killer.id, victim: victim.id, w: weapon, at: [victim.x, victim.y, victim.z] });
     if (this.mode === 'relic') return;   // kills don't score in Relic Run
     killer.score++;
@@ -277,6 +277,26 @@ export class Room {
     if (announce) this.pushEvent({ e: 'relic', what: 'home' });
   }
 
+  // The carrier's fuse (see RELIC_FUSE). Returns true if the skull burst.
+  tickFuse(r, p, t) {
+    if (!p.alive || this.matchOverAt) return false;
+    const left = C.RELIC_FUSE - (t - r.takenAt);
+    if (left <= 0) {
+      r.slowSince = null;
+      if (!C.RELIC_FUSE_EXPLODES_AT_END) return false;
+      return this.burst(p), true;
+    }
+    if (Math.hypot(p.vx || 0, p.vz || 0) >= C.RELIC_FUSE_SPEED) r.slowSince = null;
+    else if (r.slowSince == null) r.slowSince = t;
+    else if (t - r.slowSince >= C.RELIC_FUSE_GRACE) return this.burst(p), true;
+    return false;
+  }
+
+  burst(p) {
+    this.pushEvent({ e: 'relic', what: 'burst', id: p.id, p: [p.x, p.y, p.z] });
+    this.kill(p, p, 'skull');
+  }
+
   tickRelic(t) {
     const r = this.relic;
     if (r.state === 'scored') {
@@ -287,6 +307,7 @@ export class Room {
       const p = this.players.get(r.by);
       if (!p) return this.resetRelic();
       r.p = [p.x, p.y, p.z];
+      if (this.tickFuse(r, p, t)) return;
       const z = this.map.bases[p.team].zone;
       if (p.x > z.min[0] && p.x < z.max[0] && p.z > z.min[2] && p.z < z.max[2] && p.y < z.max[1]) {
         p.score++;
@@ -309,6 +330,8 @@ export class Room {
       if (Math.hypot(p.x - r.p[0], p.z - r.p[2]) < C.RELIC_GRAB_RADIUS && Math.abs(p.y - r.p[1]) < 2.5) {
         r.state = 'carried';
         r.by = p.id;
+        r.takenAt = t;
+        r.slowSince = null;
         this.pushEvent({ e: 'relic', what: 'take', id: p.id, name: p.name });
         break;
       }
@@ -361,7 +384,16 @@ export class Room {
       });
     }
     const snap = { t: 'snap', time: t, players, ev: this.events, over: this.matchOverAt ? round(this.matchOverAt - t) : 0, winner: this.winner };
-    if (this.relic) snap.relic = { st: this.relic.state, p: this.relic.p.map((v) => round(v)), by: this.relic.by };
+    if (this.relic) {
+      const r = this.relic;
+      snap.relic = { st: r.state, p: r.p.map((v) => round(v)), by: r.by };
+      if (r.state === 'carried') {
+        // fz: fuse time left; bm: seconds until it bursts (only while too slow)
+        const fz = Math.max(0, C.RELIC_FUSE - (t - r.takenAt));
+        if (fz > 0) snap.relic.fz = round(fz, 10);
+        if (fz > 0 && r.slowSince != null) snap.relic.bm = round(Math.max(0, C.RELIC_FUSE_GRACE - (t - r.slowSince)), 10);
+      }
+    }
     this.events = [];
     return snap;
   }

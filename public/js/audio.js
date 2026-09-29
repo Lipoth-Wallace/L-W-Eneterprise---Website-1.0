@@ -55,7 +55,12 @@ export function applyVolumes(v = {}) {
   for (const id of BUS_IDS) if (v[id] !== undefined) buses[id].gain.value = v[id];
 }
 
+// A new GainNode starts at 1, and automation scheduled for "now" can land a
+// render block late, so a sound could start at full level for a few ms: a
+// click. Start silent, and schedule a hair ahead.
+const LEAD = 0.006;
 function env(g, t, peak, attack, decay) {
+  g.gain.value = 0;
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
@@ -63,7 +68,7 @@ function env(g, t, peak, attack, decay) {
 
 function noiseHit({ freq = 1000, q = 1, type = 'bandpass', peak = 0.5, attack = 0.003, decay = 0.15, sweepTo = null, pan = 0, bus = 'weapons', at = null } = {}) {
   if (!ctx) return;
-  const t = at ?? ctx.currentTime;
+  const t = at ?? ctx.currentTime + LEAD;
   const src = ctx.createBufferSource();
   src.buffer = noiseBuf;
   src.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -81,15 +86,15 @@ function noiseHit({ freq = 1000, q = 1, type = 'bandpass', peak = 0.5, attack = 
   src.stop(t + attack + decay + 0.05);
 }
 
-function tone(freq, decay, type = 'sine', peak = 0.3, slideTo = null, pan = 0, bus = 'weapons', at = null) {
+function tone(freq, decay, type = 'sine', peak = 0.3, slideTo = null, pan = 0, bus = 'weapons', at = null, attack = 0.004) {
   if (!ctx) return;
-  const t = at ?? ctx.currentTime;
+  const t = at ?? ctx.currentTime + LEAD;
   const o = ctx.createOscillator();
   o.type = type;
   o.frequency.setValueAtTime(freq, t);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(freq * slideTo, t + decay);
   const g = ctx.createGain();
-  env(g, t, peak, 0.004, decay);
+  env(g, t, peak, attack, decay);
   const p = ctx.createStereoPanner();
   p.pan.value = pan;
   o.connect(g).connect(p).connect(bus === 'music' ? musicIn : buses[bus]);
@@ -128,7 +133,7 @@ export const sfx = {
   // A "wikka-wikka" record scratch: noise pushed back and forth through a band-pass.
   scratch() {
     if (!ctx) return;
-    const t = ctx.currentTime;
+    const t = ctx.currentTime + LEAD;
     const src = ctx.createBufferSource();
     src.buffer = noiseBuf;
     const f = ctx.createBiquadFilter();
@@ -173,7 +178,7 @@ export const sfx = {
   scan() {
     if (!ctx) return;
     for (const detune of [0, 7]) {
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + LEAD;
       const o = ctx.createOscillator();
       o.type = 'sine';
       o.frequency.setValueAtTime(260 + detune, t);
@@ -199,6 +204,17 @@ export const sfx = {
   relicTake(mine) {
     for (let i = 0; i < 6; i++) setTimeout(() => noiseHit({ freq: 1800 + Math.random() * 1400, q: 6, peak: 0.12, decay: 0.03, bus: 'ui' }), i * 45);
     tone(mine ? 82 : 62, 0.9, 'sawtooth', 0.12, 0.7, 0, 'ui');
+  },
+  // The skull bursting: a deep boom with a crack on top
+  burst(dist, pan = 0) {
+    const k = falloff(dist);
+    noiseHit({ freq: 180, type: 'lowpass', peak: 0.9 * k, attack: 0.004, decay: 0.9, sweepTo: 60, pan, bus: 'hits' });
+    noiseHit({ freq: 2400, q: 0.6, peak: 0.35 * k, decay: 0.12, pan, bus: 'hits' });
+    tone(90, 0.8, 'sine', 0.5 * k, 0.4, pan, 'hits');
+  },
+  // The carrier's fuse ticking while they're too slow; higher as it runs out
+  fuseTick(urgency) {
+    tone(700 + urgency * 700, 0.07, 'square', 0.05 + urgency * 0.05, 1, 0, 'ui');
   },
   relicDrop() { tone(140, 0.25, 'triangle', 0.2, 0.5, 0, 'ui'); noiseHit({ freq: 500, peak: 0.2, decay: 0.15, bus: 'ui' }); },
   relicScore(mine) {
@@ -293,11 +309,13 @@ function initAmbience() {
     }
     setTimeout(drip, 6000 + Math.random() * 12000);
   };
+  // Crickets: soft, rounded chirps (a sharp 4 kHz blip reads as a crackle)
   const cricket = () => {
     if (ambience.kind === 'outdoor') {
-      const pan = Math.random() * 1.6 - 0.8, f = 4200 + Math.random() * 600;
-      for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
-        setTimeout(() => tone(f, 0.03, 'sine', 0.012, 1, pan, 'ambience'), i * 70);
+      const pan = Math.random() * 1.6 - 0.8, f = 3600 + Math.random() * 500;
+      const t0 = ctx.currentTime + 0.05;
+      for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+        tone(f, 0.06, 'sine', 0.005, 0.97, pan, 'ambience', t0 + i * 0.11, 0.025);
       }
     }
     setTimeout(cricket, 3000 + Math.random() * 9000);
