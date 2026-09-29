@@ -207,7 +207,7 @@ function connect(opts) {
   if (opts.local) { connectLocal(opts); return; }
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   game.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map, mode: opts.mode || settings.mode }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map, mode: opts.mode || settings.mode, grace: settings.grace }));
   ws.onmessage = (ev) => { if (game && game.ws === ws) onMessage(JSON.parse(ev.data)); };
   ws.onclose = () => { if (game && game.ws === ws) endMatch(game.myId ? 'Connection lost.' : 'Could not reach the server.'); };
 }
@@ -224,7 +224,7 @@ async function connectLocal(opts) {
   const g = game;
   const { Room } = await import('/server/room.js');
   if (game !== g) return;
-  const room = new Room('SOLO', { isPrivate: true, mode: opts.mode, map: settings.map, now: () => nowS() });
+  const room = new Room('SOLO', { isPrivate: true, mode: opts.mode, map: settings.map, grace: settings.grace, now: () => nowS() });
   const deliver = (msg) => queueMicrotask(() => { if (game === g) onMessage(msg); });
   const reply = (msg) => deliver(JSON.parse(JSON.stringify(msg)));
   reply.raw = (text) => deliver(JSON.parse(text));
@@ -259,6 +259,7 @@ function onMessage(m) {
       game.isPrivate = m.isPrivate;
       game.rules = m.mode || 'dm';
       game.team = m.team;
+      game.grace = m.grace || C.RELIC_FUSE_GRACE;
       $('goal').textContent = m.killsToWin;
       $('relic-status').hidden = game.rules !== 'relic';
       history.replaceState(null, '', `?room=${m.room}`);
@@ -1150,7 +1151,7 @@ function updateHud(hs, t) {
         : `FUSE ${fz.toFixed(1)} · KEEP ≥${C.RELIC_FUSE_SPEED} M/S · ${speed.toFixed(0)} M/S`);
       // Tick faster as the burst gets closer
       if (bm != null && game.alive) {
-        const urgency = 1 - bm / C.RELIC_FUSE_GRACE, gap = 0.5 - urgency * 0.38;
+        const urgency = 1 - bm / game.grace, gap = 0.5 - urgency * 0.38;
         if (nowS() - (game.lastFuseTick || 0) > gap) { game.lastFuseTick = nowS(); sfx.fuseTick(urgency); }
       }
     } else {

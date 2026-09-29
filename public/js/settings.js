@@ -41,6 +41,7 @@ const DEFAULTS = {
   res: 270,
   fullscreen: true,
   autoSprint: false,
+  grace: 3,                // Relic Run burst countdown when you host (seconds)
   musicTrack: 'shuffle',   // a TRACKS index or 'shuffle'
   map: 'random',           // arena for rooms you create: an ARENAS id or 'random'
   mode: 'dm',              // 'dm' (deathmatch) or 'relic' (Relic Run)

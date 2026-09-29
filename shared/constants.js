@@ -91,7 +91,8 @@ export const RELIC_LEAD = 2.6;          // length of the lead it's dragged on
 // the line, so a carrier has to chain slides and hops.
 export const RELIC_FUSE = 45;
 export const RELIC_FUSE_SPEED = 10;
-export const RELIC_FUSE_GRACE = 3;
+export const RELIC_FUSE_GRACE = 3;                  // default; the host picks one of the choices
+export const RELIC_GRACE_CHOICES = [1, 2, 3, 5, 8];
 export const RELIC_FUSE_EXPLODES_AT_END = false;   // true: the fuse running out kills you too
 
 export const CHARACTERS = ['brute', 'stalker'];

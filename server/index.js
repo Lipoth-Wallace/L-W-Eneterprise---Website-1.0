@@ -40,7 +40,8 @@ export function startServer({ port = PORT, log = console.log } = {}) {
 
   // mapPref: an arena id, or 'random'. Joining by code always uses that
   // room's map; quick match prefers a waiting room on the map you picked.
-  function findRoom(requested, wantPrivate, mapPref, modePref) {
+  // grace: Relic Run's burst countdown; only used when this call creates the room.
+  function findRoom(requested, wantPrivate, mapPref, modePref, grace) {
     const mode = modePref === 'relic' ? 'relic' : 'dm';
     const pick = ARENAS.includes(mapPref) ? mapPref : ARENAS[Math.floor(Math.random() * ARENAS.length)];
     if (requested) {
@@ -48,7 +49,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       const r = rooms.get(code);
       if (r) return r.full ? { error: 'That room is full.' } : { room: r };
       if (code.length !== 4) return { error: 'Room codes are four letters.' };
-      const created = new Room(code, { isPrivate: true, map: pick, mode });
+      const created = new Room(code, { isPrivate: true, map: pick, mode, grace });
       rooms.set(code, created);
       return { room: created };
     }
@@ -58,7 +59,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       if (match) return { room: match };
     }
     const code = makeCode();
-    const created = new Room(code, { isPrivate: !!wantPrivate, map: pick, mode });
+    const created = new Room(code, { isPrivate: !!wantPrivate, map: pick, mode, grace });
     rooms.set(code, created);
     return { room: created };
   }
@@ -79,7 +80,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       if (!m || typeof m !== 'object') return;
 
       if (m.t === 'join' && !room) {
-        const found = findRoom(m.room, m.private, m.map, m.mode);
+        const found = findRoom(m.room, m.private, m.map, m.mode, m.grace);
         if (found.error) { send({ t: 'error', message: found.error }); return; }
         room = found.room;
         player = room.addPlayer(send, { name: m.name, character: m.character });

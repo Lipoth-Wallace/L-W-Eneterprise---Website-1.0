@@ -4,15 +4,16 @@ import * as C from '../shared/constants.js';
 import { Room } from '../server/room.js';
 import { normalize } from '../shared/raycast.js';
 
-function setup() {
+function setup(opts = {}) {
   let clock = 100;
-  const room = new Room('SKUL', { mode: 'relic', now: () => clock });
+  const room = new Room('SKUL', { mode: 'relic', now: () => clock, ...opts });
   const inbox = { a: [], b: [] };
   const a = room.addPlayer((m) => inbox.a.push(m), { name: 'Gruk' });
   const b = room.addPlayer((m) => inbox.b.push(m), { name: 'Vesh' });
   const advance = (dt) => { clock += dt; room.tick(); };
   // Teleport by sending a state after enough time has passed to be believable
-  const move = (p, pos) => { clock += 20; room.handleState(p, { seq: p.spawnSeq, p: pos, yaw: 0, pitch: 0 }); room.tick(); };
+  // (reporting a running speed, so a skull carrier's fuse stays quiet)
+  const move = (p, pos) => { clock += 20; room.handleState(p, { seq: p.spawnSeq, p: pos, yaw: 0, pitch: 0, v: [12, 0, 0] }); room.tick(); };
   return { room, a, b, inbox, advance, move };
 }
 const events = (room) => room.snapshot().ev;
@@ -156,4 +157,18 @@ test('the fuse: getting back up to speed within the grace resets it', () => {
   carryAt(s.room, s.a, 14, 0.5, s);
   carryAt(s.room, s.a, 5, 2.5, s);
   assert.ok(s.a.alive);
+});
+
+test('the host picks the burst timer; anything off the list falls back to the default', () => {
+  const s = setup({ grace: 8 });
+  assert.equal(s.room.grace, 8);
+  assert.equal(s.inbox.a[0].grace, 8);
+  s.move(s.a, [0.5, 8, 0]);
+  s.room.handleState(s.a, { seq: s.a.spawnSeq, p: [0.5, 8, 0], yaw: 0, pitch: 0, v: [0, 0, 0] });
+  s.a.x = -60; s.a.y = 0; s.a.z = 30;
+  carryAt(s.room, s.a, 5, 7.5, s);
+  assert.ok(s.a.alive, 'burst before 8 s');
+  carryAt(s.room, s.a, 5, 1, s);
+  assert.ok(!s.a.alive, 'survived past 8 s');
+  assert.equal(setup({ grace: 999 }).room.grace, C.RELIC_FUSE_GRACE);
 });

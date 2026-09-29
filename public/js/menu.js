@@ -87,7 +87,14 @@ export function setupMenu({ onStart }) {
   // Relic Run always plays on the Caldera, so the arena picker only matters for deathmatch.
   const mode = $('mode');
   mode.value = settings.mode;
-  const syncMode = () => { arena.closest('label').hidden = settings.mode === 'relic' || !!globalThis.BLOODFLINT_OFFLINE; };
+  // The skull's burst timer is the host's choice; it applies to rooms you create
+  const grace = $('grace');
+  grace.value = String(settings.grace);
+  grace.addEventListener('change', () => { settings.grace = +grace.value; saveSettings('general'); });
+  const syncMode = () => {
+    arena.closest('label').hidden = settings.mode === 'relic' || !!globalThis.BLOODFLINT_OFFLINE;
+    $('grace-field').hidden = settings.mode !== 'relic' && !globalThis.BLOODFLINT_OFFLINE;
+  };
   syncMode();
   mode.addEventListener('change', () => { settings.mode = mode.value; saveSettings('general'); syncMode(); });
 

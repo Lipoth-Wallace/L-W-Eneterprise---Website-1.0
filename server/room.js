@@ -18,11 +18,14 @@ const MAX_REPORTED_SPEED = C.MAX_SPEED * 1.35 + 4;   // generous: jitter bunches
 let nextPlayerId = 1;
 
 export class Room {
-  constructor(code, { isPrivate = false, map = 'kiln', mode = 'dm', now = () => performance.now() / 1000 } = {}) {
+  constructor(code, { isPrivate = false, map = 'kiln', mode = 'dm', grace = C.RELIC_FUSE_GRACE, now = () => performance.now() / 1000 } = {}) {
     this.code = code;
     this.mode = mode === 'relic' ? 'relic' : 'dm';
     if (this.mode === 'relic') this.map = MAPS.volcano;
     else this.map = MAPS[map] && ARENAS.includes(map) ? MAPS[map] : MAPS.kiln;
+    // Relic Run: how long a too-slow carrier has to get back up to speed
+    // before the skull bursts, chosen by whoever made the room
+    this.grace = C.RELIC_GRACE_CHOICES.includes(+grace) ? +grace : C.RELIC_FUSE_GRACE;
     this.relic = this.mode === 'relic' ? { state: 'home', p: [...this.map.relic.p], by: null, since: 0 } : null;
     this.isPrivate = isPrivate;
     this.now = now;
@@ -64,6 +67,7 @@ export class Room {
     send({
       t: 'welcome', id, room: this.code, isPrivate: this.isPrivate, map: this.map.id, mode: this.mode, team: p.team,
       killsToWin: this.mode === 'relic' ? C.RELIC_TO_WIN : C.KILLS_TO_WIN,
+      grace: this.mode === 'relic' ? this.grace : 0,
     });
     this.spawn(p);
     this.pushEvent({ e: 'join', id, name: p.name });
@@ -288,7 +292,7 @@ export class Room {
     }
     if (Math.hypot(p.vx || 0, p.vz || 0) >= C.RELIC_FUSE_SPEED) r.slowSince = null;
     else if (r.slowSince == null) r.slowSince = t;
-    else if (t - r.slowSince >= C.RELIC_FUSE_GRACE) return this.burst(p), true;
+    else if (t - r.slowSince >= this.grace) return this.burst(p), true;
     return false;
   }
 
@@ -391,7 +395,7 @@ export class Room {
         // fz: fuse time left; bm: seconds until it bursts (only while too slow)
         const fz = Math.max(0, C.RELIC_FUSE - (t - r.takenAt));
         if (fz > 0) snap.relic.fz = round(fz, 10);
-        if (fz > 0 && r.slowSince != null) snap.relic.bm = round(Math.max(0, C.RELIC_FUSE_GRACE - (t - r.slowSince)), 10);
+        if (fz > 0 && r.slowSince != null) snap.relic.bm = round(Math.max(0, this.grace - (t - r.slowSince)), 10);
       }
     }
     this.events = [];

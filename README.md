@@ -119,9 +119,10 @@ at speed.
   and anyone can grab it. A skull nobody touches for 25 s goes back to the
   crater.
 - **The fuse.** For 45 s after you take the skull you must keep moving at
-  **10 m/s or more**. Drop under it and a red countdown gives you 3 s to get
-  back up to speed, or the skull bursts and kills you (it drops where you
-  die). Dragging it costs speed, so a sprint alone won't cut it: chain slides
+  **10 m/s or more**. Drop under it and a red countdown starts: get back up
+  to speed before it ends, or the skull bursts and kills you (it drops where
+  you die). Whoever creates the room picks that **burst timer** on the title
+  screen: 1, 2, 3, 5 or 8 s (3 by default). Dragging it costs speed, so a sprint alone won't cut it: chain slides
   and hops. Everyone sees the fuse; your opponent also sees when you're
   slowing. After 45 s the fuse is spent and you can walk (flip
   `RELIC_FUSE_EXPLODES_AT_END` in `shared/constants.js` to make it burst
