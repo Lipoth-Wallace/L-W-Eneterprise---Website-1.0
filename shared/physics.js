@@ -36,9 +36,20 @@ export function eyeHeight(s) {
   return s.crouching ? C.CROUCH_EYE_HEIGHT : C.EYE_HEIGHT;
 }
 
+// Colliders are axis-aligned boxes { min, max }, or upright cylinders
+// { c: [x, z], r, min, max } (min/max still hold the cylinder's bounds). Against
+// a cylinder the player counts as a circle, so pushing out along the radius
+// clears it and you slide round rocks instead of snagging on corners.
 function overlapsAny(x, y, z, h, boxes) {
   const r = C.PLAYER_HALF_WIDTH;
   for (const b of boxes) {
+    if (b.r !== undefined) {
+      if (y + h > b.min[1] && y < b.max[1]) {
+        const dx = x - b.c[0], dz = z - b.c[1], R = b.r + r;
+        if (dx * dx + dz * dz < R * R) return b;
+      }
+      continue;
+    }
     if (x + r > b.min[0] && x - r < b.max[0] &&
         y + h > b.min[1] && y < b.max[1] &&
         z + r > b.min[2] && z - r < b.max[2]) return b;
@@ -58,6 +69,17 @@ function moveHorizontal(s, axis, delta, h, boxes) {
     if (s.onGround && rise > 0 && rise <= C.STEP_HEIGHT &&
         !overlapsAny(s.x, b.max[1] + 1e-4, s.z, h, boxes)) {
       s.y = b.max[1] + 1e-4;
+      continue;
+    }
+    if (b.r !== undefined) {
+      // Out along the radius, keeping the velocity that runs along the wall
+      let nx = s.x - b.c[0], nz = s.z - b.c[1];
+      const d = Math.hypot(nx, nz);
+      if (d < 1e-6) { nx = 1; nz = 0; } else { nx /= d; nz /= d; }
+      s.x = b.c[0] + nx * (b.r + r + 1e-4);
+      s.z = b.c[1] + nz * (b.r + r + 1e-4);
+      const into = s.vx * nx + s.vz * nz;
+      if (into < 0) { s.vx -= nx * into; s.vz -= nz * into; }
       continue;
     }
     const i = axis === 'x' ? 0 : 2;

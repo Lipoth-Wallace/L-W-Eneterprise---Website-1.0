@@ -1,7 +1,13 @@
 // Low-res pipeline: the world and viewmodel are drawn into a small render
 // target, then a full-screen pass posterises it with a 4x4 Bayer dither, adds a
-// vignette and the hurt flash. The canvas stays at that small size and CSS
-// scales it up with nearest-neighbour filtering, so the pixels stay chunky.
+// vignette and the hurt flash. That pass upscales the small image onto the
+// full-resolution canvas with nearest-neighbour filtering, so the pixels stay
+// chunky.
+//
+// One thing is drawn at full resolution on top: the relic skull's own scene
+// (photoreal, tone-mapped, antialiased) so it looks like it doesn't belong.
+// A depth-only pass of the world (and the viewmodel, pinned to the near plane)
+// goes first, so walls and your own hands still cover it.
 
 import * as THREE from 'three';
 
@@ -17,6 +23,7 @@ uniform float hurt;
 uniform float scan;
 uniform float levels;
 uniform float time;
+uniform vec2 lowSize;
 varying vec2 vUv;
 
 float bayer4(vec2 p) {
@@ -36,7 +43,7 @@ void main() {
   // Crush the shadows toward blood red and lift contrast a touch
   c = pow(c, vec3(1.08));
   c.r += 0.012;
-  float d = bayer4(gl_FragCoord.xy) - 0.5;
+  float d = bayer4(floor(vUv * lowSize)) - 0.5;
   c = floor(c * levels + d + 0.5) / levels;
   vec2 q = vUv - 0.5;
   float vig = smoothstep(0.85, 0.2, length(q * vec2(1.1, 1.0)));
@@ -49,6 +56,29 @@ void main() {
 }
 `;
 
+// Depth only, for hiding the skull behind the world
+const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+// Depth only, pinned to the near plane: the viewmodel always covers the skull
+const depthNear = new THREE.MeshBasicMaterial({ colorWrite: false, depthFunc: THREE.AlwaysDepth });
+depthNear.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  gl_Position.z = -gl_Position.w;');
+};
+
+// Only solid meshes hide the skull: sprites, particles, lines and see-through
+// effects are switched off for the depth pass.
+const hidden = [];
+function hideNonSolid(root) {
+  root.traverse((o) => {
+    if (!o.visible) return;
+    const m = o.material;
+    if (o.isSprite || o.isPoints || o.isLine || (o.isMesh && m && (Array.isArray(m) ? m.some((x) => x.transparent) : m.transparent || m.colorWrite === false))) {
+      o.visible = false;
+      hidden.push(o);
+    }
+  });
+}
+function restore() { for (const o of hidden) o.visible = true; hidden.length = 0; }
+
 export function createPost(renderer) {
   const target = new THREE.WebGLRenderTarget(4, 4, {
     minFilter: THREE.NearestFilter,
@@ -56,7 +86,7 @@ export function createPost(renderer) {
     depthBuffer: true,
   });
   const material = new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: target.texture }, hurt: { value: 0 }, scan: { value: 0 }, levels: { value: 14 }, time: { value: 0 } },
+    uniforms: { tDiffuse: { value: target.texture }, hurt: { value: 0 }, scan: { value: 0 }, levels: { value: 14 }, time: { value: 0 }, lowSize: { value: new THREE.Vector2(4, 4) } },
     vertexShader: vert,
     fragmentShader: frag,
     depthTest: false,
@@ -70,8 +100,10 @@ export function createPost(renderer) {
 
   return {
     uniforms: material.uniforms,
-    setSize(w, h) { target.setSize(w, h); },
-    render(worldScene, worldCam, vmScene, vmCam) {
+    /** w, h: the low-res world size. The canvas itself is sized by the caller. */
+    setSize(w, h) { target.setSize(w, h); material.uniforms.lowSize.value.set(w, h); },
+    /** overlay: an optional full-resolution scene drawn last (the relic skull). */
+    render(worldScene, worldCam, vmScene, vmCam, overlay = null) {
       renderer.setRenderTarget(target);
       renderer.autoClear = false;
       renderer.clear(true, true, true);
@@ -79,7 +111,22 @@ export function createPost(renderer) {
       renderer.clearDepth();
       renderer.render(vmScene, vmCam);
       renderer.setRenderTarget(null);
+      renderer.clear(true, true, true);
       renderer.render(scene, cam);
+      if (overlay) {
+        const bg = worldScene.background, fog = worldScene.fog;
+        worldScene.background = null; worldScene.fog = null;
+        hideNonSolid(worldScene);
+        worldScene.overrideMaterial = depthOnly;
+        renderer.render(worldScene, worldCam);
+        worldScene.overrideMaterial = null;
+        restore();
+        worldScene.background = bg; worldScene.fog = fog;
+        vmScene.overrideMaterial = depthNear;
+        renderer.render(vmScene, vmCam);
+        vmScene.overrideMaterial = null;
+        renderer.render(overlay, worldCam);
+      }
       renderer.autoClear = true;
     },
   };

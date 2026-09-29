@@ -64,8 +64,12 @@ onSettingsChange((what) => {
 
 function initRenderer() {
   if (renderer) return;
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  // Antialiasing and tone mapping only touch the full-resolution canvas, which
+  // shows the chunky world upscaled plus the one photoreal thing: the skull.
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   camera = new THREE.PerspectiveCamera(90, 16 / 9, 0.05, 1000);
   camera.rotation.order = 'YXZ';
   post = createPost(renderer);
@@ -90,7 +94,7 @@ function loadMap(map) {
     boxes: map.boxes,
     onSplat: (point, normal) => { effects.impact(point, normal); effects.impact(point, normal); },
   });
-  skull = map.relic ? createSkull(scene) : null;
+  skull = map.relic ? createSkull(scene, renderer) : null;
   setAmbience(map.id === 'kiln' ? 'cave' : 'outdoor');
 }
 
@@ -99,7 +103,10 @@ function resize() {
   const h = settings.res || 270;
   const aspect = innerWidth / innerHeight;
   const w = Math.max(1, Math.round(h * aspect));
-  renderer.setSize(w, h, false);
+  // The canvas is full resolution (capped for weak GPUs); the world is drawn
+  // small and upscaled by post.js.
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  renderer.setSize(Math.round(innerWidth * dpr), Math.round(innerHeight * dpr), false);
   post.setSize(w, h);
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
@@ -886,7 +893,7 @@ function frame(now) {
   if (!game) return;
   update(dt, now / 1000);
   post.uniforms.hurt.value = game.hurt;
-  post.render(scene, camera, vm.scene, vm.camera);
+  post.render(scene, camera, vm.scene, vm.camera, skull && skull.ready && skull.visible ? skull.scene : null);
 }
 
 function update(dt, t) {

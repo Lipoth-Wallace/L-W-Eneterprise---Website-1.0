@@ -24,6 +24,38 @@ function vnoise(x, y, z) {
   return r - 0.5;
 }
 
+// An upright cylinder collider drawn as rock. Mountains taper into ragged
+// peaks well above the collider (nobody gets up there); terraces and boulders
+// keep a flat top you can land on.
+function roundRock(b, mat) {
+  const r = b.r, y0 = b.min[1], h = b.max[1] - y0;
+  const mountain = b.mat === 'mountain';
+  const seg = Math.max(12, Math.min(72, Math.round(r * 1.6)));
+  const hh = mountain ? h * 1.1 : h;
+  const geo = new THREE.CylinderGeometry(mountain ? r * 0.4 : r, r, hh, seg, Math.max(1, Math.round(hh / (mountain ? 5 : 1.5))), false);
+  // Texture: wrap once per 2.5 m around, and up the side
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (2 * Math.PI * r) / 2.5, uv.getY(i) * hh / 2.5);
+  geo.translate(b.c[0], y0 + hh / 2, b.c[1]);
+  if (mountain) {
+    // Big crags, then smaller breakup. Keep the foot where the collider is.
+    const pos = geo.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const k = Math.min(1, (v.y - y0) / 6);   // 0 at the foot, 1 from 6 m up
+      const n = vnoise(v.x * 0.07, v.y * 0.05, v.z * 0.07) * 9 * k;
+      const dx = v.x - b.c[0], dz = v.z - b.c[1], d = Math.hypot(dx, dz) || 1;
+      v.x += (dx / d) * n; v.z += (dz / d) * n;
+      v.y += vnoise(v.x * 0.1 + 9, v.y * 0.1, v.z * 0.1) * 6 * k;
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    lumpy(geo, 0.9, 0.3);
+  } else {
+    lumpy(geo, r > 20 ? 0.7 : 0.45, 0.4, b.max[1]);
+  }
+  return new THREE.Mesh(geo, mat);
+}
+
 // keepTopY: leave the walkable top face flat (for terraces you stand on)
 function lumpy(geometry, amp, freq, keepTopY) {
   const pos = geometry.attributes.position;
@@ -54,28 +86,35 @@ export function buildWorld(scene, map) {
     basalt: new THREE.MeshLambertMaterial({ map: tex.rock, color: 0x5a4a4a, flatShading: true }),
     step: new THREE.MeshLambertMaterial({ map: tex.slab, color: 0x5a4e4c }),
     wood: new THREE.MeshLambertMaterial({ map: tex.bark, color: 0xa08a80 }),
+    boulder: new THREE.MeshLambertMaterial({ map: tex.rock, color: 0x6a5652, flatShading: true }),
+    mountain: new THREE.MeshLambertMaterial({ map: tex.rock, color: 0x4a3634, flatShading: true }),
   };
 
-  scene.add(new THREE.AmbientLight(0x4a1c16, 2.2));
+  // Lighting: bright enough to read the shapes of the world near you. Low
+  // visibility comes from the mist, which swallows anything far away, not
+  // from pitch-black shadows.
+  scene.add(new THREE.AmbientLight(0x5a2a22, 3.0));
   let sky = null;
   if (map.sky) {
     sky = addSky(scene);
-    scene.fog = map.fog ? new THREE.FogExp2(map.fog.color, map.fog.density) : new THREE.FogExp2(0x3a0e0a, 0.012);
-    // Dim red moonlight: long shadows are too expensive, but a key light from
+    scene.fog = map.fog ? new THREE.FogExp2(map.fog.color, map.fog.density) : new THREE.FogExp2(0x4a1c16, 0.012);
+    // Red moonlight: long shadows are too expensive, but a key light from
     // the moon's side keeps silhouettes readable.
-    scene.add(new THREE.HemisphereLight(0x8a5048, 0x180808, 1.3));
-    const moon = new THREE.DirectionalLight(0xff7a5a, 1.1);
+    scene.add(new THREE.HemisphereLight(0xb07068, 0x2a1010, 2.2));
+    const moon = new THREE.DirectionalLight(0xff8a6a, 1.7);
     moon.position.set(...MOON_DIR.map((v) => v * 100));
     scene.add(moon);
   } else {
-    scene.background = new THREE.Color(0x050101);
-    scene.fog = new THREE.FogExp2(0x100404, 0.022);
-    // A dull grey-brown fill from above keeps shapes readable; the red comes from the point lights.
-    scene.add(new THREE.HemisphereLight(0x8a7670, 0x180808, 1.5));
+    scene.fog = new THREE.FogExp2(0x2c100c, 0.02);
+    scene.background = scene.fog.color.clone();
+    // A grey-brown fill from above keeps shapes readable; the red comes from the point lights.
+    scene.add(new THREE.HemisphereLight(0xa89088, 0x2a1414, 2.3));
   }
+  const mist = addMist(scene, scene.fog.color);
 
   for (const b of map.boxes) {
     if (b.mat === 'trunk') continue;   // drawn as round trees in addThicketDecor
+    if (b.r !== undefined) { scene.add(roundRock(b, mats[b.mat] || mats.basalt)); continue; }
     const sx = b.max[0] - b.min[0], sy = b.max[1] - b.min[1], sz = b.max[2] - b.min[2];
     const isRock = b.mat === 'rock' || b.mat === 'basalt';
     const seg = (n) => (isRock ? Math.max(1, Math.round(n / 1.2)) : 1);
@@ -129,6 +168,7 @@ export function buildWorld(scene, map) {
     bushes: extras.bushes || [],
     update(t, camera) {
       if (sky && camera) sky.position.copy(camera.position);
+      if (camera) mist.update(t, camera);
       if (extras.update) extras.update(t);
       for (const f of flickers) {
         f.light.intensity = f.base * (0.75 + 0.25 * Math.sin(t * 13 + f.phase) * Math.sin(t * 7.3 + f.phase * 2));
@@ -188,6 +228,53 @@ function addKilnDecor(scene, map, glowMat, glowDim) {
 const MOON_DIR = new THREE.Vector3(-0.35, 0.32, -1).normalize().toArray();
 
 // Sky dome, moon and stars. The group follows the camera so they never get closer.
+// A thin layer of drifting ground mist around the viewer: soft puffs a bit
+// lighter than the fog, low to the ground. It keeps far fighters hazy while
+// the lighting keeps the near world readable.
+function addMist(scene, fogColor) {
+  const n = 220, R = 34;
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    seed[i * 3] = (Math.random() * 2 - 1) * R;
+    seed[i * 3 + 1] = Math.random();
+    seed[i * 3 + 2] = (Math.random() * 2 - 1) * R;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const cg = c.getContext('2d');
+  // Lumpy, not a clean disc
+  for (let k = 0; k < 7; k++) {
+    const x = 20 + Math.random() * 24, y = 20 + Math.random() * 24, r = 12 + Math.random() * 14;
+    const grad = cg.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.35)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    cg.fillStyle = grad;
+    cg.fillRect(0, 0, 64, 64);
+  }
+  const color = fogColor.clone().lerp(new THREE.Color(0xc89a90), 0.2);
+  const mat = new THREE.PointsMaterial({ color, size: 9, map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.1, depthWrite: false, fog: true });
+  const pts = new THREE.Points(g, mat);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  const wrap = (v) => ((v + R) % (2 * R) + 2 * R) % (2 * R) - R;
+  return {
+    update(t, camera) {
+      const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+      for (let i = 0; i < n; i++) {
+        // Drift slowly, and wrap around the viewer so the layer never ends
+        const x = wrap(seed[i * 3] + t * 0.6 - cx) + cx;
+        const z = wrap(seed[i * 3 + 2] + t * 0.25 - cz) + cz;
+        pos[i * 3] = x;
+        pos[i * 3 + 1] = cy - 1.9 + seed[i * 3 + 1] * 1.5 + Math.sin(t * 0.3 + i) * 0.2;
+        pos[i * 3 + 2] = z;
+      }
+      g.attributes.position.needsUpdate = true;
+    },
+  };
+}
+
 function addSky(scene) {
   const group = new THREE.Group();
   const dome = new THREE.Mesh(
@@ -483,14 +570,28 @@ function addVolcanoDecor(scene, map) {
     pulsing.push(flat(5, 5, sx * 7.5, 8.03, sz * 7.5, lava));
   }
   // Lava falls down the terrace faces, and channels across the plains
-  for (const [x, z, w, d] of [[0, 45.05, 3, 0], [0, -45.05, 3, 0], [45.05, 22, 0, 3], [-45.05, -22, 0, 3]]) {
-    const fall = new THREE.Mesh(new THREE.PlaneGeometry(w || d, 4), lavaDim);
-    fall.position.set(x, 2, z);
-    fall.rotation.y = w ? (z > 0 ? 0 : Math.PI) : (x > 0 ? Math.PI / 2 : -Math.PI / 2);
+  for (const deg of [20, 110, 200, 290]) {
+    const a = deg * Math.PI / 180;
+    const fall = new THREE.Mesh(new THREE.PlaneGeometry(3, 4), lavaDim);
+    fall.position.set(Math.cos(a) * 45.8, 2, Math.sin(a) * 45.8);
+    fall.rotation.y = Math.PI / 2 - a;
     scene.add(fall);
   }
   for (const [x, z, w, d] of [[-70, 0, 26, 1.4], [70, 0, 26, 1.4], [0, -70, 1.4, 30], [0, 70, 1.4, 30], [-60, 60, 18, 1.2], [60, -60, 18, 1.2]]) {
     flat(w, d, x, 0.03, z, lavaDim);
+  }
+
+  // A massif behind the ring of peaks, so it reads as one mountain range
+  // rather than a fence of spires. Decor only: the ring does the blocking.
+  const massif = new THREE.MeshLambertMaterial({ map: getTextures().rock, color: 0x3e2c2a, flatShading: true });
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2 + Math.sin(i * 12.9) * 0.05;
+    const d = 150 + Math.abs(Math.sin(i * 3.7)) * 22;
+    const r = 34 + Math.abs(Math.sin(i * 5.3)) * 16, h = 60 + Math.abs(Math.sin(i * 2.1)) * 55;
+    const geo = new THREE.ConeGeometry(r, h, 9, 5);
+    geo.translate(Math.cos(a) * d, h / 2 - 2, Math.sin(a) * d);
+    lumpy(geo, 5, 0.05);
+    scene.add(new THREE.Mesh(geo, massif));
   }
 
   // Launch pads: a glowing rune plate that pulses

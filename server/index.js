@@ -22,6 +22,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
   app.use(express.static(path.join(root, 'public')));
   app.use('/shared', express.static(path.join(root, 'shared')));
   app.use('/vendor/three', express.static(path.join(root, 'node_modules/three/build')));
+  app.use('/vendor/three-addons', express.static(path.join(root, 'node_modules/three/examples/jsm')));
   app.get('/healthz', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
 
   const server = createServer(app);

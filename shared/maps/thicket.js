@@ -90,7 +90,7 @@ export const THICKET = {
   halfSize: W,
   ceiling: 30,
   sky: true,
-  fog: { color: 0x240907, density: 0.022 },   // thicker than the Quarry: you hunt by scan here
+  fog: { color: 0x3a1814, density: 0.021 },   // thicker than the Quarry: you hunt by scan here
   boxes,
   trees: TREES,
   bushes: BUSHES,

@@ -127,3 +127,14 @@ test('every spawn is clear of map geometry', () => {
     assert.ok(Math.hypot(s.x - sp.p[0], s.z - sp.p[2]) < 0.01, `spawn ${sp.p} was pushed`);
   }
 });
+
+test('rays hit upright cylinder colliders on the side and on top', async () => {
+  const { rayMap } = await import('../shared/raycast.js');
+  const c = [{ c: [0, 0], r: 2, min: [-2, 0, -2], max: [2, 3, 2] }];
+  const side = rayMap([-10, 1, 0], [1, 0, 0], 50, c);
+  assert.ok(Math.abs(side.t - 8) < 1e-6 && Math.abs(side.normal[0] + 1) < 1e-6);
+  const top = rayMap([0.5, 10, 0.5], [0, -1, 0], 50, c);
+  assert.ok(Math.abs(top.t - 7) < 1e-6 && top.normal[1] === 1);
+  const miss = rayMap([-10, 1, 2.5], [1, 0, 0], 50, c);
+  assert.equal(miss.t, Infinity);
+});

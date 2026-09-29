@@ -66,3 +66,44 @@ test('each cave capture zone is open ground a player can stand in', () => {
     assert.ok(s.x > z.min[0] && s.x < z.max[0] && s.z > z.min[2] && s.z < z.max[2]);
   }
 });
+
+test('the mountain ring seals the Caldera: nothing on foot gets past it', () => {
+  // Flood-fill ground-level cells a standing player fits in, starting in the
+  // west cave. Nothing reachable may lie beyond the mountains' inner face.
+  const r = 0.4, H = 1.8, STEP = 0.55;
+  const solid = V.boxes.filter((b) => b.min[1] < H && b.max[1] > STEP);
+  const free = (x, z) => !solid.some((b) => (b.r !== undefined
+    ? Math.hypot(x - b.c[0], z - b.c[1]) < b.r + r
+    : x + r > b.min[0] && x - r < b.max[0] && z + r > b.min[2] && z - r < b.max[2]));
+  const N = 150, key = (i, j) => i * 1000 + j;
+  const seen = new Set([key(-99, 0)]);
+  const queue = [[-99, 0]];
+  let far = 0;
+  while (queue.length) {
+    const [i, j] = queue.pop();
+    far = Math.max(far, Math.hypot(i, j));
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = i + di, b = j + dj;
+      if (Math.abs(a) > N || Math.abs(b) > N || seen.has(key(a, b)) || !free(a, b)) continue;
+      seen.add(key(a, b));
+      queue.push([a, b]);
+    }
+  }
+  // The peaks' inner faces sit 107-110 m out; the server's bounds are 112.5
+  assert.ok(far < V.halfSize, `reached ${far.toFixed(1)} m from the centre`);
+  assert.ok(seen.has(key(99, 0)), 'the east cave is reachable from the west cave');
+});
+
+test('running into the round terrace turns you along it instead of stopping you', () => {
+  // Aim just off-centre at the first terrace's wall and sprint: you should
+  // keep most of your speed and slide round the curve
+  const s = createPlayerState([-60, 0, 20], -Math.PI / 2);
+  for (let i = 0; i < 30; i++) stepPlayer(s, { yaw: -Math.PI / 2, pitch: 0 }, DT, V.boxes);
+  let minR = Infinity;
+  for (let i = 0; i < 3 / DT; i++) {
+    stepPlayer(s, { yaw: -Math.PI / 2, pitch: 0, fwd: 1, sprint: true }, DT, V.boxes);
+    minR = Math.min(minR, Math.hypot(s.x, s.z));
+  }
+  assert.ok(minR > 45, `went inside the terrace wall (r=${minR.toFixed(2)})`);
+  assert.ok(s.z > 22 && Math.hypot(s.vx, s.vz) > 4, `stalled at x=${s.x.toFixed(1)} z=${s.z.toFixed(1)}`);
+});

@@ -57,7 +57,9 @@ fullscreen.
 
 ## Seeing in the dark: the scan
 
-The maps are dark on purpose, and fighters in shadow are hard to spot. The
+The world near you is lit well enough to read, but every map has a mist: a
+fog that swallows anything far off, plus a thin drifting layer of ground
+mist. Distant fighters are hard to spot. The
 scan (`E`, every 3.75 s) is how you cut through that. It's inspired by Hunt:
 Showdown's Dark Sight:
 
@@ -100,8 +102,12 @@ was created with, and anyone who joins by code plays on that map.
 
 ## Relic Run
 
-A second mode, picked on the title screen, played on **the Caldera**: a
-225 x 225 m volcanic map (2.5x the Thicket on each side).
+A second mode, picked on the title screen, played on **the Caldera**: a round
+volcanic basin 225 m across (2.5x the Thicket), walled in by a ring of tall
+mountains. There are no square edges. The terraces, the crater rim, the
+boulders and the mountain wall are all round, and running into one turns you
+along its curve instead of stopping you, so you can carve round the volcano
+at speed.
 
 - A giant human skull hovers in the crater at the summit. Touch it and it's
   yours, dragged behind you on a lead. **Dragging it costs 25% of your
@@ -112,15 +118,22 @@ A second mode, picked on the title screen, played on **the Caldera**: a
   crater.
 - An enemy scan shows the skull carrier as a **dark red** ghost and mist
   instead of amber.
-- The volcano has four levels: the plains, two terraces and the crater rim.
+- The volcano has four levels: the plains, two round terraces and the
+  boulders of the crater rim, with a gap on every side.
   Sprint straight up the stairs (every step is under the auto-step height),
   or use the glowing **launch pads** on the diagonals, which fling you a whole
-  tier up. The pads also work while you're carrying the skull.
+  tier up (ground pads to the crater floor, crater-floor pads onto a rim
+  boulder). The pads also work while you're carrying the skull.
   `test/volcano.test.js` plays the climb and every pad, with and without the
-  skull.
-- The skull is sculpted: carved sockets that fall into shadow, pinprick
-  pupils that follow whoever looks at it, a jaw that clacks at irregular
-  intervals and chatters while it's dragged, and a slow breathing swell.
+  skull. It also flood-fills the map to prove nothing on foot gets past the
+  mountains.
+- The skull is a real photogrammetry-grade human skull mesh (CC0, see
+  `public/assets/CREDITS.md`) and it deliberately doesn't belong. It's the
+  one thing drawn at full screen resolution: antialiased, with physically
+  based bone, baked occlusion in every suture and socket, its own clean
+  studio lighting and filmic tone mapping. Everything around it stays chunky
+  and dithered. Walls and your own hands still hide it. It turns slowly to
+  watch whoever looks at it, and it breathes.
 - It's 1v1 for now: each "team" is one player. Real teams (2v2 and up) need
   the server's rooms, spawns and scoring reworked around teams.
 
@@ -166,7 +179,7 @@ shared/            Code the server and browser both load
   maps/thicket.js  The Thicket: 1v1 forest arena
   maps/volcano.js  The Caldera: Relic Run map
   maps/range.js    The Quarry: practice range and parkour course
-  physics.js       Player movement
+  physics.js       Player movement (box and cylinder colliders)
   raycast.js       Hitscan maths, per-pose turning hitboxes
   scan.js          Scan wave and cone maths
 public/            The client (three.js, no build step)
@@ -174,13 +187,14 @@ public/            The client (three.js, no build step)
   js/world.js      Cave scene built from shared/map.js
   js/characters.js GRUK and VESH, the two fighters
   js/viewmodel.js  First-person hands and weapons
-  js/post.js       Low-res render, dither and vignette pass
+  js/post.js       Low-res render, dither, vignette, full-res skull overlay
   js/effects.js    Tracers, blood, embers, ground spears
   js/audio.js      Synthesised sound, mixer channels and the beats
   js/settings.js   Settings, keybinds, the Settings panel
   js/chain.js      First-person gold chain (verlet rope)
   js/scan.js       The scan: eyes, wave, through-wall highlight
-  js/skull.js      The relic: sculpted skull, lead, dragging
+  js/skull.js      The relic: scanned skull (full-res pass), lead, dragging
+  assets/          skull.glb (built by scripts/prepare-skull.mjs) + CREDITS
 test/              node:test suites
 ```
 

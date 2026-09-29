@@ -29,12 +29,45 @@ export function rayBox(o, d, min, max, maxDist = Infinity, out = null) {
   return tmin;
 }
 
+/** Ray against an upright cylinder collider { c: [x, z], r, min, max }. */
+export function rayCyl(o, d, b, maxDist = Infinity, out = null) {
+  const ox = o[0] - b.c[0], oz = o[2] - b.c[1], R = b.r, y0 = b.min[1], y1 = b.max[1];
+  if (ox * ox + oz * oz <= R * R && o[1] >= y0 && o[1] <= y1) {
+    if (out) out.normal = [0, 1, 0];
+    return 0;
+  }
+  let best = Infinity, n = null;
+  const a = d[0] * d[0] + d[2] * d[2];
+  if (a > 1e-12) {
+    const bq = ox * d[0] + oz * d[2], c = ox * ox + oz * oz - R * R;
+    const disc = bq * bq - a * c;
+    if (disc >= 0) {
+      const t = (-bq - Math.sqrt(disc)) / a;
+      const y = o[1] + d[1] * t;
+      if (t >= 0 && t <= maxDist && y >= y0 && y <= y1) {
+        best = t;
+        n = [(ox + d[0] * t) / R, 0, (oz + d[2] * t) / R];
+      }
+    }
+  }
+  if (Math.abs(d[1]) > 1e-9) {
+    for (const [Y, ny] of [[y1, 1], [y0, -1]]) {
+      const t = (Y - o[1]) / d[1];
+      if (t < 0 || t >= best || t > maxDist) continue;
+      const px = ox + d[0] * t, pz = oz + d[2] * t;
+      if (px * px + pz * pz <= R * R) { best = t; n = [0, ny, 0]; }
+    }
+  }
+  if (out && n) out.normal = n;
+  return best;
+}
+
 /** Nearest map hit: { t, point, normal } (t is Infinity on a miss). */
 export function rayMap(o, d, maxDist, boxes = MAP.boxes) {
   let best = { t: Infinity, point: null, normal: [0, 1, 0] };
   const tmp = {};
   for (const b of boxes) {
-    const t = rayBox(o, d, b.min, b.max, maxDist, tmp);
+    const t = b.r !== undefined ? rayCyl(o, d, b, maxDist, tmp) : rayBox(o, d, b.min, b.max, maxDist, tmp);
     if (t < best.t) best = { t, point: null, normal: tmp.normal };
   }
   if (best.t === Infinity) {

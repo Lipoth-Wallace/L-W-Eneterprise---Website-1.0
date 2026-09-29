@@ -38,6 +38,9 @@ const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'))
   .replace(/<script type="module" src="\/js\/main.js"><\/script>/, '');
 const fonts = html.match(/<link href="https:\/\/fonts.googleapis.com[^>]+>/)[0];
 
+// The relic's scanned skull, inlined so the page needs nothing else
+const skull = fs.readFileSync(path.join(root, 'public/assets/skull.glb')).toString('base64');
+
 const page = `<title>Bloodflint</title>
 ${fonts}
 <style>
@@ -45,7 +48,7 @@ ${fonts}
 ${css}
 </style>
 ${body}
-<script>window.BLOODFLINT_OFFLINE = true;</script>
+<script>window.BLOODFLINT_OFFLINE = true; window.BLOODFLINT_SKULL_URL = 'data:model/gltf-binary;base64,${skull}';</script>
 <script type="module">
 ${js}
 </script>
