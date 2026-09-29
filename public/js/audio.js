@@ -274,6 +274,9 @@ export const TRACKS = [
 
 let musicIn = null;          // entry point for music voices
 let keysBus = null;
+let echoIn = null;           // delay send for lead lines
+let echoWet = null;
+let echoDelay = null;
 let seq = null;              // { track, step, bar, nextTime }
 let seqTimer = 0;
 let wantedTrack = 0;
@@ -307,6 +310,19 @@ function initMusic() {
   keysLP.type = 'lowpass';
   keysLP.frequency.value = 4000;
   keysBus.connect(keysLP).connect(musicIn);
+
+  // Echo: a dotted-eighth delay with feedback, for lead lines
+  echoIn = ctx.createGain();
+  echoDelay = ctx.createDelay(2);
+  const fb = ctx.createGain();
+  fb.gain.value = 0.35;
+  const echoLP = ctx.createBiquadFilter();
+  echoLP.type = 'lowpass';
+  echoLP.frequency.value = 3000;
+  echoWet = ctx.createGain();
+  echoWet.gain.value = 0;
+  echoIn.connect(echoDelay).connect(echoLP).connect(fb).connect(echoDelay);
+  echoLP.connect(echoWet).connect(musicIn);
 }
 
 /** index: a TRACKS index, or 'shuffle'. */
@@ -317,6 +333,9 @@ export function playMusic(index = wantedTrack) {
   const track = TRACKS[index] || TRACKS[0];
   if (seq && seq.track === track) return;
   seq = { track, step: 0, bar: 0, nextTime: ctx.currentTime + 0.1 };
+  echoDelay.delayTime.value = (60 / track.bpm) * 0.75;
+  echoWet.gain.value = track.echo || 0;
+  lastBassHz = 0;
   if (!seqTimer) seqTimer = setInterval(schedule, 25);
 }
 
@@ -348,20 +367,58 @@ function schedule() {
   }
 }
 
+// Hat patterns: a velocity per 16th (0 = silent)
+const HATS = {
+  dusty: [0.55, 0.18, 0.35, 0.2, 0.55, 0.18, 0.35, 0.2, 0.55, 0.18, 0.35, 0.2, 0.55, 0.18, 0.35, 0.2],
+  steady: [0.5, 0.2, 0.4, 0.2, 0.5, 0.2, 0.4, 0.2, 0.5, 0.2, 0.4, 0.2, 0.5, 0.2, 0.4, 0.2],
+  eighths: [0.5, 0, 0.3, 0, 0.5, 0, 0.3, 0, 0.5, 0, 0.3, 0, 0.5, 0, 0.3, 0],
+  rolling: [0.5, 0.15, 0.3, 0.15, 0.45, 0.15, 0.3, 0.4, 0.5, 0.15, 0.3, 0.15, 0.45, 0.3, 0.35, 0.45],
+  offbeat: [0, 0, 0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0],
+  sparse: [0.4, 0, 0, 0, 0, 0, 0.3, 0, 0.4, 0, 0, 0, 0, 0, 0.3, 0],
+  shaker: [0.35, 0.15, 0.25, 0.15, 0.35, 0.15, 0.25, 0.15, 0.35, 0.15, 0.25, 0.15, 0.35, 0.15, 0.25, 0.3],
+};
+
+// A track can pick its sounds and shape (every field is optional; the
+// defaults are the original dusty kit, Rhodes and triangle bass):
+//   kit: dusty | hard | boom | rim | tribal     hats: a HATS name
+//   keys: rhodes | organ | pluck | bell | strings | horns | piano | whistle
+//   bassVoice: tri | sub | saw                  chordBars: bars per chord
+//   toms: [[step, pitch, vel]]                  echo: 0..0.5 on the lead
+//   lead: { voice, oct, in: 'all' | 'B', notes: [[bar 0|1, step, semitone, 16ths]] }
+//   form: true for sections over 16 bars: a 2-bar intro without kick and
+//     bass, the lead in bars 8-15, and a half-bar drop at the end
 function playStep(s, t) {
   const tr = s.track, step = s.step, bar = s.bar;
-  const beat = 60 / tr.bpm;
+  const six = 60 / tr.bpm / 4;
+  const form = tr.form ? bar % 16 : -1;
+  const intro = form >= 0 && form < 2;
+  const drop = form === 15 && step >= 8;
   const fill = !tr.steady && bar % 8 === 7 && step >= 12;   // a little turnaround every 8 bars
-  const chord = tr.chords[bar % tr.chords.length];
+  const chord = tr.chords[Math.floor(bar / (tr.chordBars || 1)) % tr.chords.length];
+  const kit = KITS[tr.kit] || KITS.dusty;
 
-  if (tr.kick.includes(step) && !(fill && step > 12)) kick(t);
-  if (tr.snare.includes(step) || (fill && step % 2 === 1)) snare(t, 1);
-  if (tr.ghost.includes(step)) snare(t, 0.25);
-  const hatVel = tr.steady ? [0.5, 0.2, 0.4, 0.2][step % 4] : [0.55, 0.18, 0.35, 0.2][step % 4];
-  hat(t, hatVel, !tr.steady && step === 14 && bar % 2 === 1);
+  if (!intro && !drop && tr.kick.includes(step) && !(fill && step > 12)) kit.kick(t);
+  if (!drop && (tr.snare.includes(step) || (fill && step % 2 === 1))) kit.snare(t, 1);
+  if (!intro && tr.ghost.includes(step)) kit.snare(t, 0.25);
+  if (tr.toms && !intro) for (const [at, pitch, vel] of tr.toms) if (at === step) tom(t, pitch, vel);
+  const hv = (HATS[tr.hats] || (tr.steady ? HATS.steady : HATS.dusty))[step];
+  if (hv) {
+    if (tr.hats === 'shaker') shaker(t, hv);
+    else hat(t, hv, !tr.steady && !tr.hats && step === 14 && bar % 2 === 1);
+  }
 
-  for (const [at, off, len] of tr.bass) if (at === step) bassNote(midiHz(tr.root - 12 + chord[0] + off), len * beat / 4, t);
-  for (const [at, len] of tr.stabs) if (at === step) for (const n of chord) rhodes(midiHz(tr.root + 12 + n), len * beat / 4, t);
+  const bass = BASS[tr.bassVoice] || bassNote;
+  if (!intro) for (const [at, off, len] of tr.bass) if (at === step) bass(midiHz(tr.root - 12 + chord[0] + off), len * six, t);
+  const keys = KEYS[tr.keys] || rhodes;
+  if (!drop) for (const [at, len] of tr.stabs) if (at === step) for (const n of chord) keys(midiHz(tr.root + 12 + n), len * six, t);
+
+  const lead = tr.lead;
+  if (lead && !intro && (lead.in !== 'B' || form < 0 || form >= 8)) {
+    const voice = KEYS[lead.voice] || rhodes;
+    for (const [b, at, semi, len] of lead.notes) {
+      if (b === bar % 2 && at === step) voice(midiHz(tr.root + (lead.oct ?? 24) + semi), len * six, t, lead.vel || 1.3, true);
+    }
+  }
 }
 
 function kick(t) {
@@ -404,11 +461,11 @@ function bassNote(freq, len, t) {
 
 // Electric-piano-ish: a sine with a quiet bell partial on top, fast attack,
 // soft decay. The tremolo comes from keysBus.
-function rhodes(freq, len, t) {
+function rhodes(freq, len, t, vel = 1, echo = false) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.07, t + 0.008);
-  g.gain.exponentialRampToValueAtTime(0.03, t + 0.25);
+  g.gain.exponentialRampToValueAtTime(0.07 * vel, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.03 * vel, t + 0.25);
   g.gain.setTargetAtTime(0.0001, t + len, 0.12);
   const a = ctx.createOscillator();
   a.type = 'sine';
@@ -422,5 +479,213 @@ function rhodes(freq, len, t) {
   a.connect(g);
   b.connect(bg).connect(g);
   g.connect(keysBus);
+  if (echo) g.connect(echoIn);
   for (const o of [a, b]) { o.start(t); o.stop(t + len + 0.8); }
 }
+
+// ---------------------------------------------------------------- more kits
+
+function kickHard(t) {
+  const o = ctx.createOscillator();
+  o.frequency.setValueAtTime(180, t);
+  o.frequency.exponentialRampToValueAtTime(50, t + 0.08);
+  const g = ctx.createGain();
+  env(g, t, 1.1, 0.002, 0.3);
+  o.connect(g).connect(musicIn);
+  o.start(t); o.stop(t + 0.4);
+  tone(2000, 0.01, 'sine', 0.1, 0.5, 0, 'music', t);
+}
+
+// 808-style: a long, low boom
+function kickBoom(t) {
+  const o = ctx.createOscillator();
+  o.frequency.setValueAtTime(110, t);
+  o.frequency.exponentialRampToValueAtTime(42, t + 0.25);
+  const g = ctx.createGain();
+  env(g, t, 1, 0.003, 1.0);
+  o.connect(g).connect(musicIn);
+  o.start(t); o.stop(t + 1.1);
+}
+
+function clap(t, vel) {
+  for (let i = 0; i < 3; i++) noiseHit({ freq: 1300, q: 1, peak: 0.35 * vel, decay: 0.02, bus: 'music', at: t + i * 0.012 });
+  noiseHit({ freq: 1500, q: 0.8, peak: 0.28 * vel, decay: 0.2, bus: 'music', at: t + 0.036 });
+}
+
+function snap(t, vel) {
+  noiseHit({ freq: 2600, q: 0.6, peak: 0.45 * vel, decay: 0.14, bus: 'music', at: t });
+  tone(220, 0.07, 'triangle', 0.25 * vel, 0.8, 0, 'music', t);
+}
+
+function rim(t, vel) {
+  tone(1700, 0.03, 'triangle', 0.22 * vel, 0.9, 0, 'music', t);
+  noiseHit({ freq: 3500, q: 2, peak: 0.28 * vel, decay: 0.03, bus: 'music', at: t });
+}
+
+// Low drum; pitch scales 120 Hz
+function tom(t, pitch = 1, vel = 0.6) {
+  const o = ctx.createOscillator();
+  o.frequency.setValueAtTime(180 * pitch, t);
+  o.frequency.exponentialRampToValueAtTime(120 * pitch, t + 0.15);
+  const g = ctx.createGain();
+  env(g, t, 0.7 * vel, 0.003, 0.35);
+  o.connect(g).connect(musicIn);
+  o.start(t); o.stop(t + 0.45);
+}
+
+function shaker(t, vel) {
+  noiseHit({ freq: 6000, q: 1.5, peak: 0.1 * vel, attack: 0.012, decay: 0.05, pan: -0.2, bus: 'music', at: t });
+}
+
+const KITS = {
+  dusty: { kick, snare },
+  hard: { kick: kickHard, snare: clap },
+  boom: { kick: kickBoom, snare: snap },
+  rim: { kick, snare: rim },
+  tribal: { kick: kickHard, snare: (t, vel) => { tom(t, 1.8, vel); clap(t, vel * 0.6); } },
+};
+
+// ---------------------------------------------------------------- more voices
+// Each takes (freq, len, t, vel = 1, echo = false). echo also sends the note
+// to the delay, which repeats a dotted eighth later.
+
+function voiceOut(g, echo) {
+  g.connect(musicIn);
+  if (echo) g.connect(echoIn);
+}
+
+function organ(freq, len, t, vel = 1, echo = false) {
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.045 * vel, t + 0.01);
+  g.gain.setTargetAtTime(0.0001, t + len, 0.06);
+  const f = ctx.createBiquadFilter();
+  f.type = 'lowpass'; f.frequency.value = 1600;
+  f.connect(g);
+  voiceOut(g, echo);
+  for (const [mul, type, lvl] of [[1, 'square', 1], [2, 'square', 0.4], [0.5, 'sine', 0.6]]) {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq * mul;
+    const og = ctx.createGain(); og.gain.value = lvl;
+    o.connect(og).connect(f);
+    o.start(t); o.stop(t + len + 0.4);
+  }
+}
+
+function pluck(freq, len, t, vel = 1, echo = false) {
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 2;
+  f.frequency.setValueAtTime(4000, t);
+  f.frequency.exponentialRampToValueAtTime(500, t + 0.25);
+  const g = ctx.createGain();
+  env(g, t, 0.07 * vel, 0.003, Math.max(0.2, len) + 0.3);
+  o.connect(f).connect(g);
+  voiceOut(g, echo);
+  o.start(t); o.stop(t + len + 0.7);
+}
+
+function bell(freq, len, t, vel = 1, echo = false) {
+  const g = ctx.createGain();
+  env(g, t, 0.05 * vel, 0.003, 1.2);
+  const a = ctx.createOscillator(); a.frequency.value = freq;
+  const b = ctx.createOscillator(); b.frequency.value = freq * 3.5;
+  const bg = ctx.createGain();
+  bg.gain.setValueAtTime(0.35, t);
+  bg.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+  a.connect(g); b.connect(bg).connect(g);
+  voiceOut(g, echo);
+  for (const o of [a, b]) { o.start(t); o.stop(t + 1.4); }
+}
+
+function strings(freq, len, t, vel = 1, echo = false) {
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.028 * vel, t + 0.3);
+  g.gain.setTargetAtTime(0.0001, t + len, 0.35);
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400;
+  f.connect(g);
+  voiceOut(g, echo);
+  for (const cents of [-7, 7]) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = cents;
+    o.connect(f);
+    o.start(t); o.stop(t + len + 1.6);
+  }
+}
+
+function horns(freq, len, t, vel = 1, echo = false) {
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(500, t);
+  f.frequency.exponentialRampToValueAtTime(2600, t + 0.05);
+  f.frequency.exponentialRampToValueAtTime(1100, t + 0.25);
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.045 * vel, t + 0.03);
+  g.gain.setTargetAtTime(0.0001, t + len, 0.08);
+  o.connect(f).connect(g);
+  voiceOut(g, echo);
+  o.start(t); o.stop(t + len + 0.5);
+}
+
+function piano(freq, len, t, vel = 1, echo = false) {
+  const g = ctx.createGain();
+  env(g, t, 0.07 * vel, 0.004, Math.min(1.6, len + 0.8));
+  for (const [mul, type, lvl] of [[1, 'triangle', 1], [2, 'sine', 0.3], [3, 'sine', 0.1]]) {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq * mul;
+    const og = ctx.createGain(); og.gain.value = lvl;
+    o.connect(og).connect(g);
+    o.start(t); o.stop(t + len + 1.7);
+  }
+  voiceOut(g, echo);
+}
+
+function whistle(freq, len, t, vel = 1, echo = false) {
+  const o = ctx.createOscillator(); o.frequency.value = freq;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 5.5;
+  const depth = ctx.createGain(); depth.gain.value = freq * 0.006;
+  lfo.connect(depth).connect(o.frequency);
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.04 * vel, t + 0.06);
+  g.gain.setTargetAtTime(0.0001, t + len, 0.12);
+  o.connect(g);
+  voiceOut(g, echo);
+  for (const x of [o, lfo]) { x.start(t); x.stop(t + len + 0.8); }
+}
+
+const KEYS = { rhodes, organ, pluck, bell, strings, horns, piano, whistle };
+
+// Bass: a sine that glides from the last note, and a filtered saw
+let lastBassHz = 0;
+function subBass(freq, len, t) {
+  const o = ctx.createOscillator();
+  o.frequency.setValueAtTime(lastBassHz || freq, t);
+  o.frequency.exponentialRampToValueAtTime(freq, t + 0.06);
+  lastBassHz = freq;
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.6, t + 0.01);
+  g.gain.setTargetAtTime(0.0001, t + len, 0.08);
+  o.connect(g).connect(musicIn);
+  o.start(t); o.stop(t + len + 0.6);
+}
+
+function sawBass(freq, len, t) {
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 3;
+  f.frequency.setValueAtTime(900, t);
+  f.frequency.exponentialRampToValueAtTime(300, t + 0.15);
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.32, t + 0.008);
+  g.gain.setTargetAtTime(0.0001, t + len, 0.05);
+  o.connect(f).connect(g).connect(musicIn);
+  o.start(t); o.stop(t + len + 0.4);
+}
+
+const BASS = { tri: bassNote, sub: subBass, saw: sawBass };
