@@ -897,9 +897,9 @@ function update(dt, t) {
   // Scan: sense living fighters in the cone as the wave reaches them
   const bodyHeight = (pose) => C.HITBOXES[pose].height - 0.2;
   const scanTargets = game.mode === 'practice'
-    ? game.bots.filter((b) => b.alive).map((b) => ({ key: b, p: b.p, v: [0, 0], h: bodyHeight(b.pose) }))
+    ? game.bots.filter((b) => b.alive).map((b) => ({ key: b, model: b.model, p: b.p, v: [0, 0], h: bodyHeight(b.pose) }))
     : [...game.remotes.values()].filter((r) => r.pose && r.pose.a)
-      .map((r) => ({ key: r.id, p: r.pose.p, v: r.pose.v, h: bodyHeight(poseOf(r.pose.cr, r.pose.sl)) }));
+      .map((r) => ({ key: r.id, model: r.model, p: r.pose.p, v: r.pose.v, h: bodyHeight(poseOf(r.pose.cr, r.pose.sl)) }));
   if (scan.update(nowS(), scanTargets) > 0) sfx.scanPing();
   post.uniforms.scan.value = scan.pulse(nowS()) * 0.8;
 

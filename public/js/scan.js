@@ -1,12 +1,11 @@
 // The scan: press it and a pair of 2D eyes shoots out from the crosshair,
 // growing exponentially. A wavefront expands at the same exponential rate
-// through a cone in front of you, and any fighter it reaches is wreathed in a
-// churning amber mist, visible through walls, for SCAN_REVEAL seconds (after
-// Hunt: Showdown's Dark Sight).
-//
-// The mist is deliberately vague: a rough body-sized cloud, not an outline you
-// can aim at a head with. It streams out behind a moving fighter, so the
-// trail tells you which way they're heading.
+// through a cone in front of you, and any fighter it reaches shows up through
+// walls for SCAN_REVEAL seconds (after Hunt: Showdown's Dark Sight) as:
+//   - a sliced amber ghost of their body (see createGhost in characters.js):
+//     their build, but broken into flickering, shearing slices;
+//   - a wisp of mist that streams out behind them when they move, so you can
+//     read which way they're heading.
 //
 // Opponents see your eyes fly out from where you stand, so scanning gives
 // away your position.
@@ -73,7 +72,7 @@ export function createScan(scene, overlay) {
           const c = inCone(wave.eye, wave.dir, chest);
           if (c.inside && c.dist <= r) {
             wave.found.add(t.key);
-            revealed.set(t.key, { until: now + C.SCAN_REVEAL, mist: createMist(scene, puff) });
+            revealed.set(t.key, { until: now + C.SCAN_REVEAL, mist: createMist(scene, puff), model: t.model });
             fresh++;
           }
         }
@@ -85,8 +84,10 @@ export function createScan(scene, overlay) {
       this.last = now;
       for (const [key, r] of revealed) {
         const left = r.until - now, t = byKey.get(key);
-        if (left <= 0 || !t) { r.mist.dispose(); revealed.delete(key); continue; }
-        r.mist.update(dt, t, Math.min(1, left / 0.8));
+        if (left <= 0 || !t) { r.mist.dispose(); r.model.setGhost(0, now); revealed.delete(key); continue; }
+        const k = Math.min(1, left / 0.8);
+        r.mist.update(dt, t, k);
+        r.model.setGhost(k, now);
       }
       for (let i = sprites.length - 1; i >= 0; i--) {
         const sp = sprites[i];
@@ -109,7 +110,7 @@ export function createScan(scene, overlay) {
       return wave ? Math.max(0, 1 - (now - wave.start) / C.SCAN_WAVE_TIME) : 0;
     },
     clear() {
-      for (const r of revealed.values()) r.mist.dispose();
+      for (const r of revealed.values()) { r.mist.dispose(); r.model.setGhost(0, 0); }
       revealed.clear();
       wave = null;
     },
@@ -135,7 +136,7 @@ function puffTexture() {
 
 const AMBER = new THREE.Color(0xff6a00);
 const HOT = new THREE.Color(0xffa820);
-const MIST_N = 90;
+const MIST_N = 40;
 
 // The mist around one sensed fighter. Particles are born inside the body's
 // rough volume and live half a second, boiling outward and upward. While the
@@ -168,9 +169,9 @@ function createMist(scene, tex) {
     p.z = t.p[2] + (Math.random() - 0.5) * 0.8;
     const vx = t.v ? t.v[0] : 0, vz = t.v ? t.v[1] : 0;
     // Aggressive churn, plus a shove backwards against the direction of travel
-    p.vx = (Math.random() - 0.5) * 2.2 - vx * 0.65;
+    p.vx = (Math.random() - 0.5) * 2.2 - vx * 0.5;
     p.vy = 0.3 + Math.random() * 0.9;
-    p.vz = (Math.random() - 0.5) * 2.2 - vz * 0.65;
+    p.vz = (Math.random() - 0.5) * 2.2 - vz * 0.5;
     p.life = 0.4 + Math.random() * 0.5;
     p.age = stagger ? Math.random() * p.life : 0;
   }
@@ -187,11 +188,11 @@ function createMist(scene, tex) {
         pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
         // Bright at birth, burning down to dark amber; flicker keeps it restless
         const k = 1 - p.age / p.life;
-        c.copy(AMBER).lerp(HOT, k * k).multiplyScalar(Math.sqrt(k) * strength * (0.5 + Math.random() * 0.5) * 0.42);
+        c.copy(AMBER).lerp(HOT, k * k).multiplyScalar(Math.sqrt(k) * strength * (0.5 + Math.random() * 0.5) * 0.24);
         col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       }
       first = false;
-      mat.size = 0.6 + Math.random() * 0.25;
+      mat.size = 0.45 + Math.random() * 0.2;
       geo.attributes.position.needsUpdate = true;
       geo.attributes.color.needsUpdate = true;
     },

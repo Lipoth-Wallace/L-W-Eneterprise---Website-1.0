@@ -197,10 +197,13 @@ export function createCharacter(type) {
   let phase = 0;
   const state = { speed: 0 };
   const kneeL = rig.legL.userData.knee, kneeR = rig.legR.userData.knee;
+  const ghost = createGhost(rig.root);
 
   return {
     group: rig.root,
     rig,
+    /** Scan ghost strength 0..1, and the clock driving its flicker. */
+    setGhost: ghost.set,
     /** pose: { vx, vz, yaw, pitch, crouch, slide, ground, weapon, hasSpear, charge } */
     update(pose, dt) {
       rig.root.rotation.y = pose.yaw;
@@ -257,3 +260,86 @@ export function createCharacter(type) {
     },
   };
 }
+
+// ---------------------------------------------------------------- scan ghost
+//
+// What a scan shows: an amber hologram of the fighter's own body, drawn through
+// walls. It keeps their build but is cut into thin horizontal slices; slices
+// drop out and shear sideways at random, the edges glow brighter than the
+// middle, and a band of light rolls up the body. Every mesh gets an additive
+// twin sharing one shader; the twins are hidden until a scan finds them.
+
+const GHOST_VERT = /* glsl */`
+uniform float uTime;
+varying vec3 vWorld;
+varying vec3 vNormalV;
+varying vec3 vViewDir;
+float hash(float n) { return fract(sin(n) * 43758.5453); }
+void main() {
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  // Shear each slice sideways a little, re-rolled 14 times a second
+  float slice = floor(w.y / 0.11);
+  float tick = floor(uTime * 14.0);
+  float shove = (hash(slice * 3.7 + tick * 1.3) - 0.5) * 0.14 * step(0.7, hash(slice + tick * 5.1));
+  w.x += shove;
+  w.z += shove * 0.6;
+  vWorld = w.xyz;
+  vec4 mv = viewMatrix * w;
+  vNormalV = normalize(normalMatrix * normal);
+  vViewDir = normalize(-mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const GHOST_FRAG = /* glsl */`
+uniform float uStrength;
+uniform float uTime;
+uniform vec3 uColor;
+varying vec3 vWorld;
+varying vec3 vNormalV;
+varying vec3 vViewDir;
+float hash(float n) { return fract(sin(n) * 43758.5453); }
+void main() {
+  float s = vWorld.y / 0.11;
+  float slice = floor(s);
+  float tick = floor(uTime * 14.0);
+  float r = hash(slice * 13.1 + tick * 7.7);
+  if (fract(s) > 0.58) discard;          // the gaps between slices
+  if (r < 0.2) discard;                  // whole slices blink out
+  float rim = pow(1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir))), 1.4);
+  float roll = 0.55 + 0.45 * sin(vWorld.y * 3.2 - uTime * 7.0);
+  float a = uStrength * (0.18 + 0.82 * rim) * roll * (0.55 + 0.45 * r);
+  gl_FragColor = vec4(uColor * a, 1.0);
+}`;
+
+function createGhost(root) {
+  const uniforms = {
+    uStrength: { value: 0 },
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color(0xff8a00).multiplyScalar(1.4) },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms, vertexShader: GHOST_VERT, fragmentShader: GHOST_FRAG,
+    transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const twins = [];
+  root.traverse((o) => {
+    if (!o.isMesh || o.userData.twin) return;
+    for (let p = o; p; p = p.parent) if (p.userData.cosmetic) return;
+    const t = new THREE.Mesh(o.geometry, mat);
+    t.userData.twin = true;
+    t.scale.setScalar(1.06);
+    t.renderOrder = 10;
+    t.visible = false;
+    twins.push({ o, t });
+  });
+  for (const { o, t } of twins) o.add(t);
+  return {
+    set(k, time) {
+      const on = k > 0.001;
+      for (const { t } of twins) t.visible = on;
+      uniforms.uStrength.value = k;
+      uniforms.uTime.value = time;
+    },
+  };
+}
+
