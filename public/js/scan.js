@@ -7,36 +7,28 @@
 //   - a wisp of mist that streams out behind them when they move, so you can
 //     read which way they're heading.
 //
-// Opponents see your eyes fly out from where you stand, so scanning gives
-// away your position.
+// The eyes are yours alone: opponents never see them. They only hear a faint
+// whisper from your direction.
 
 import * as THREE from 'three';
 import * as C from '/shared/constants.js';
-import { waveRadius, inCone, WAVE_K as K } from '/shared/scan.js';
+import { waveRadius, inCone } from '/shared/scan.js';
 
-// Almond eyes with slit pupils, used by the HUD overlay and the world sprite
+// Two kite-shaped eyes joined at their inner points, each with a slit pupil.
+// Only the scanning player ever sees them (a HUD overlay).
 export const EYES_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
-  <defs><radialGradient id="i" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffe08a"/><stop offset="0.55" stop-color="#ffb000"/><stop offset="1" stop-color="#b85a00"/></radialGradient></defs>
-  <g fill="url(#i)" stroke="#ffc233" stroke-width="1.5">
-    <path d="M6 20 Q26 2 50 20 Q26 38 6 20 Z"/>
-    <path d="M70 20 Q94 2 114 20 Q94 38 70 20 Z"/>
+  <defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="0.5" stop-color="#ffa000"/><stop offset="1" stop-color="#b85400"/></linearGradient></defs>
+  <g fill="url(#k)" stroke="#ffc84a" stroke-width="1.2" stroke-linejoin="round">
+    <path d="M4 20 L34 6 L56 20 L34 34 Z"/>
+    <path d="M116 20 L86 6 L64 20 L86 34 Z"/>
+    <path d="M55 18.6 L65 18.6 L65 21.4 L55 21.4 Z"/>
   </g>
-  <g fill="#1a0602"><ellipse cx="28" cy="20" rx="2.6" ry="11"/><ellipse cx="92" cy="20" rx="2.6" ry="11"/></g>
+  <g fill="#1a0602"><path d="M34 11 L36.4 20 L34 29 L31.6 20 Z"/><path d="M86 11 L88.4 20 L86 29 L83.6 20 Z"/></g>
 </svg>`;
 
 export function createScan(scene, overlay) {
   let wave = null;                 // our current scan: { eye, dir, start, found:Set }
   const revealed = new Map();      // target key -> { until, mist }
-  const sprites = [];              // other players' eyes flying through the world
-
-  // One shared texture for world sprites, drawn from the SVG
-  const tex = new THREE.Texture();
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
-  const img = new Image();
-  img.onload = () => { tex.image = img; tex.needsUpdate = true; };
-  img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(EYES_SVG);
   const puff = puffTexture();
 
   return {
@@ -48,14 +40,6 @@ export function createScan(scene, overlay) {
         void overlay.offsetWidth;          // restart the CSS animation
         overlay.classList.add('go');
       }
-    },
-    /** Show an opponent's scan leaving them. */
-    remote(eye, dir, now) {
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
-      const s = new THREE.Sprite(mat);
-      s.renderOrder = 5;
-      scene.add(s);
-      sprites.push({ s, eye: [...eye], dir: [...dir], start: now });
     },
     /**
      * targets: [{ key, model, p: [x, y, z] (feet) }]. Returns the number of
@@ -88,20 +72,6 @@ export function createScan(scene, overlay) {
         const k = Math.min(1, left / 0.8);
         r.mist.update(dt, t, k);
         r.model.setGhost(k, now);
-      }
-      for (let i = sprites.length - 1; i >= 0; i--) {
-        const sp = sprites[i];
-        const age = now - sp.start;
-        const d = waveRadius(age);
-        const size = 0.5 * Math.exp(K * 0.6 * Math.min(age, C.SCAN_WAVE_TIME));
-        sp.s.position.set(sp.eye[0] + sp.dir[0] * d, sp.eye[1] + sp.dir[1] * d, sp.eye[2] + sp.dir[2] * d);
-        sp.s.scale.set(size * 3, size, 1);
-        sp.s.material.opacity = Math.max(0, 1 - age / C.SCAN_WAVE_TIME);
-        if (age > C.SCAN_WAVE_TIME) {
-          scene.remove(sp.s);
-          sp.s.material.dispose();
-          sprites.splice(i, 1);
-        }
       }
       return fresh;
     },

@@ -381,7 +381,7 @@ function onEvent(ev) {
     }
     case 'scan':
       if (ev.id !== me) {
-        scan.remote(ev.o, ev.d, nowS());
+        // Their eyes are private; you only hear a whisper from their direction.
         const [dist, pan] = relAudio(ev.o);
         sfx.scanDistant(dist, pan);
       }

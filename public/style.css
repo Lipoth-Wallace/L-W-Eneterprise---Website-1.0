@@ -212,14 +212,15 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
 #scan-eyes {
   position: absolute; left: 50%; top: 50%; width: 120px; height: 40px; margin: -20px 0 0 -60px;
   background-size: contain; background-repeat: no-repeat; opacity: 0; pointer-events: none;
-  filter: drop-shadow(0 0 6px #ffa000);
+  filter: drop-shadow(0 0 5px rgba(255, 160, 0, 0.7));
 }
-/* Exponential growth: the ease-in curve keeps it small, then it explodes outward */
-#scan-eyes.go { animation: scan-eyes 0.7s cubic-bezier(0.8, 0, 1, 0.6) forwards; }
+/* The eyes leave your chest (bottom of the screen), rise to the crosshair and
+   grow exponentially as they fade. 80% opaque at their strongest. */
+#scan-eyes.go { animation: scan-eyes 0.75s cubic-bezier(0.7, 0, 1, 0.5) forwards; }
 @keyframes scan-eyes {
-  0% { transform: scale(0.4); opacity: 1; }
-  70% { opacity: 0.9; }
-  100% { transform: scale(14); opacity: 0; }
+  0% { transform: translateY(40vh) scale(0.35); opacity: 0.8; }
+  40% { transform: translateY(6vh) scale(1.3); opacity: 0.8; }
+  100% { transform: translateY(0) scale(16); opacity: 0; }
 }
 .weapon.scan .bar i { background: #ffb000; }
 .weapon.scan .bar i.loading { background: #6a4a20; }

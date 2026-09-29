@@ -61,7 +61,7 @@ The maps are dark on purpose, and fighters in shadow are hard to spot. The
 scan (`E`, every 3.75 s) is how you cut through that. It's inspired by Hunt:
 Showdown's Dark Sight:
 
-- A pair of eyes shoots out from your crosshair, growing exponentially.
+- A pair of eyes shoots out of you, growing exponentially.
 - A wavefront expands through a **cone in front of you** (40° each side,
   60 m). Any fighter it reaches shows up **through walls and foliage** for
   about 2 seconds as a sliced amber ghost of their own body. It keeps their
@@ -69,9 +69,9 @@ Showdown's Dark Sight:
   sideways, and a churning amber shroud rides along with them to blur the
   head and edges. A moving fighter also drags a mist trail behind them that
   points back the way they came, so you can read their direction.
-- **The catch:** your opponent sees your eyes fly out from where you're
-  standing, and hears a whisper from your direction. Scanning gives away your
-  position.
+- The eyes are two amber kites joined at the middle, 80% opaque. They leave
+  your chest and rise to the crosshair, and **only you see them**. Your
+  opponent just hears a faint whisper from your direction.
 
 ## Hitboxes
 
