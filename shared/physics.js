@@ -266,7 +266,9 @@ function substep(s, input, dt, boxes, pads) {
 
   // Hard horizontal cap
   const hs = Math.hypot(s.vx, s.vz);
-  const cap = C.MAX_SPEED * s.speedMult;
+  // A launch pad's throw is the pad's speed, not yours: the relic carrier's
+  // penalty doesn't apply until you land
+  const cap = C.MAX_SPEED * (s.padFlight ? 1 : s.speedMult);
   if (hs > cap) { s.vx *= cap / hs; s.vz *= cap / hs; }
 
   s.vy -= C.GRAVITY * dt;
@@ -288,6 +290,7 @@ function substep(s, input, dt, boxes, pads) {
     }
   }
   s.onGround = landed;
+  if (landed) s.padFlight = false;
   if (s.onGround && !wasOnGround) {
     s.justLanded = true;
     events.landed = true;
@@ -308,6 +311,7 @@ function substep(s, input, dt, boxes, pads) {
         s.vx = dx * along; s.vy = p.v[1]; s.vz = dz * along;
         s.onGround = false;
         s.sliding = false;
+        s.padFlight = true;
         events.launched = true;
         break;
       }

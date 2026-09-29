@@ -113,16 +113,20 @@ symCyl(-78, 38, 1.8, 0, 1.4, 'boulder');
 symCyl(-78, -38, 1.8, 0, 1.4, 'boulder');
 
 // Launch pads (flat plates) on the diagonals: ground -> second terrace, and
-// second terrace -> the rim boulder on that diagonal. Horizontal speed stays
-// under the relic carrier's cap, so they work while dragging the skull too.
+// second terrace -> the rim boulder on that diagonal. The carrier's speed
+// penalty doesn't apply mid-throw, so they land the same with the skull.
 const pads = [];
 const D = Math.SQRT1_2;
-const GROUND_PAD = 12.3, RIM_PAD = 5.3;   // per axis: 17.4 and 7.5 m/s along the diagonal
+// Per axis; along the diagonal that's 24 m/s (up 24) and 12 m/s (up 20).
+// Fast, flat throws: the ground pads land you on the crater floor between the
+// rim and the rim pads; the rim pads sit near the terrace edge so the throw
+// has room to clear the boulder's side.
+const GROUND_PAD = 17, GROUND_UP = 24, RIM_PAD = 8.5, RIM_UP = 20;
 for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
   const g = 59 * D;
-  pads.push({ min: [sx * g - 1.5, 0, sz * g - 1.5], max: [sx * g + 1.5, 0, sz * g + 1.5], v: [-sx * GROUND_PAD, 26, -sz * GROUND_PAD] });
-  const c = 26 * D;
-  pads.push({ min: [sx * c - 1.5, 8, sz * c - 1.5], max: [sx * c + 1.5, 8, sz * c + 1.5], v: [-sx * RIM_PAD, 19, -sz * RIM_PAD] });
+  pads.push({ min: [sx * g - 1.5, 0, sz * g - 1.5], max: [sx * g + 1.5, 0, sz * g + 1.5], v: [-sx * GROUND_PAD, GROUND_UP, -sz * GROUND_PAD] });
+  const c = 30 * D;
+  pads.push({ min: [sx * c - 1.5, 8, sz * c - 1.5], max: [sx * c + 1.5, 8, sz * c + 1.5], v: [-sx * RIM_PAD, RIM_UP, -sz * RIM_PAD] });
 }
 
 export const VOLCANO = {
