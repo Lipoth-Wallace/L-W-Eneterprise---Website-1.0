@@ -1,7 +1,8 @@
 // All sound is synthesised with WebAudio, so there are no audio files to ship.
 //
 // Routing: every sound goes through one of the mixer channels (weapons, hits,
-// movement, ambience, ui, music), then master, then a compressor.
+// movement, ui, music), then master, then a compressor. There's no ambience:
+// the only sounds are the game's and the beat.
 //
 // Music: three original 90s boom-bap beats, sequenced live. Swung 16th hats,
 // dusty kick and snare, Rhodes-style 7th/9th chords, a bass line and vinyl
@@ -13,7 +14,7 @@ let ctx = null, master = null, noiseBuf = null, slideGain = null;
 const buses = {};
 let musicLP = null;
 
-const BUS_IDS = ['weapons', 'hits', 'movement', 'ambience', 'ui', 'music'];
+const BUS_IDS = ['weapons', 'hits', 'movement', 'ui', 'music'];
 
 export function initAudio(volumes = {}) {
   if (ctx) { ctx.resume(); applyVolumes(volumes); return; }
@@ -30,8 +31,6 @@ export function initAudio(volumes = {}) {
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-
-  initAmbience();
 
   // Looping scrape for slides; faded in and out by setSliding()
   const slideNode = ctx.createBufferSource();
@@ -161,7 +160,6 @@ export const sfx = {
   land() { tone(80, 0.08, 'sine', 0.3, 0.6, 0, 'movement'); noiseHit({ freq: 300, peak: 0.15, decay: 0.05, bus: 'movement' }); },
   slide() { noiseHit({ freq: 900, sweepTo: 400, peak: 0.09, decay: 0.18, bus: 'movement' }); },
   step() { noiseHit({ freq: 500 + Math.random() * 200, q: 2, peak: 0.07, decay: 0.04, bus: 'movement' }); },
-  chain() { tone(2600 + Math.random() * 900, 0.05, 'triangle', 0.035, 1.2, 0, 'movement'); },
   pickup() {
     tone(330, 0.1, 'square', 0.12, 2, 0, 'ui');
     setTimeout(() => tone(495, 0.12, 'square', 0.1, 1.5, 0, 'ui'), 60);
@@ -232,105 +230,9 @@ export function previewBus(id) {
   if (!ctx) return;
   if (id === 'weapons' || id === 'master') sfx.sling();
   else if (id === 'hits') sfx.kill();
-  else if (id === 'movement') { sfx.land(); sfx.chain(); }
+  else if (id === 'movement') sfx.land();
   else if (id === 'ui') sfx.pickup();
-  else if (id === 'ambience') tone(1600, 0.12, 'sine', 0.08, 0.35, 0, 'ambience');
   // music is already playing, so the level change is heard directly
-}
-
-// ---------------------------------------------------------------- ambience
-//
-// Kept low and slow so it never nags: no constant tones, nothing periodic you
-// can count. Cave: a rumble that swells and fades over ~20 s, and rare, soft
-// drips with a faint echo. Outdoors: wind gusts and the odd cricket.
-
-let ambience = null;
-
-function initAmbience() {
-  const cave = ctx.createGain();
-  const outdoor = ctx.createGain();
-  cave.gain.value = 0;
-  outdoor.gain.value = 0;
-  cave.connect(buses.ambience);
-  outdoor.connect(buses.ambience);
-
-  // Rumble with a slow swell
-  const rumble = ctx.createBufferSource();
-  rumble.buffer = noiseBuf;
-  rumble.loop = true;
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 70;
-  const rg = ctx.createGain();
-  rg.gain.value = 0.12;
-  const swell = ctx.createOscillator();
-  swell.frequency.value = 0.05;
-  const swellDepth = ctx.createGain();
-  swellDepth.gain.value = 0.06;
-  swell.connect(swellDepth).connect(rg.gain);
-  rumble.connect(lp).connect(rg).connect(cave);
-  rumble.start();
-  swell.start();
-
-  // Wind: band-passed noise whose level and pitch drift on two slow, unrelated LFOs
-  const wind = ctx.createBufferSource();
-  wind.buffer = noiseBuf;
-  wind.loop = true;
-  wind.playbackRate.value = 0.5;
-  const wf = ctx.createBiquadFilter();
-  wf.type = 'bandpass';
-  wf.frequency.value = 420;
-  wf.Q.value = 0.7;
-  const wg = ctx.createGain();
-  wg.gain.value = 0.05;
-  const gust = ctx.createOscillator();
-  gust.frequency.value = 0.07;
-  const gustDepth = ctx.createGain();
-  gustDepth.gain.value = 0.04;
-  gust.connect(gustDepth).connect(wg.gain);
-  const whistle = ctx.createOscillator();
-  whistle.frequency.value = 0.031;
-  const whistleDepth = ctx.createGain();
-  whistleDepth.gain.value = 180;
-  whistle.connect(whistleDepth).connect(wf.frequency);
-  wind.connect(wf).connect(wg).connect(outdoor);
-  wind.start();
-  gust.start();
-  whistle.start();
-
-  ambience = { cave, outdoor, kind: null };
-
-  // Sparse one-shots, scheduled at random so there's no rhythm to notice
-  const drip = () => {
-    if (ambience.kind === 'cave') {
-      const pan = Math.random() * 1.6 - 0.8, f = 1300 + Math.random() * 1100;
-      tone(f, 0.1, 'sine', 0.03, 0.4, pan, 'ambience');
-      setTimeout(() => tone(f, 0.1, 'sine', 0.01, 0.4, -pan, 'ambience'), 170);
-    }
-    setTimeout(drip, 6000 + Math.random() * 12000);
-  };
-  // Crickets: soft, rounded chirps (a sharp 4 kHz blip reads as a crackle)
-  const cricket = () => {
-    if (ambience.kind === 'outdoor') {
-      const pan = Math.random() * 1.6 - 0.8, f = 3600 + Math.random() * 500;
-      const t0 = ctx.currentTime + 0.05;
-      for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
-        tone(f, 0.06, 'sine', 0.005, 0.97, pan, 'ambience', t0 + i * 0.11, 0.025);
-      }
-    }
-    setTimeout(cricket, 3000 + Math.random() * 9000);
-  };
-  setTimeout(drip, 4000);
-  setTimeout(cricket, 2500);
-}
-
-/** 'cave' | 'outdoor' | null (menu). */
-export function setAmbience(kind) {
-  if (!ambience || ambience.kind === kind) return;
-  ambience.kind = kind;
-  const t = ctx.currentTime;
-  ambience.cave.gain.setTargetAtTime(kind === 'cave' ? 1 : 0, t, 0.8);
-  ambience.outdoor.gain.setTargetAtTime(kind === 'outdoor' ? 1 : 0, t, 0.8);
 }
 
 // ---------------------------------------------------------------- music

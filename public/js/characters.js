@@ -32,26 +32,6 @@ function spike(r, h, mat, x, y, z, rx = 0, rz = 0) {
   return m;
 }
 
-// Gold chain draped over the chest, with a medallion on a pivot so it can swing.
-function addChain(torso, { y, z, r }) {
-  const gold = new THREE.MeshLambertMaterial({ color: 0xffc23a, emissive: 0x5a3400, flatShading: true });
-  const loop = new THREE.Mesh(new THREE.TorusGeometry(r, 0.022, 4, 14), gold);
-  loop.position.set(0, y, z);
-  loop.rotation.x = 1.2;           // mostly flat round the neck, dipping at the front
-  torso.add(loop);
-  const pivot = new THREE.Group();
-  pivot.position.set(0, y - r * 0.4, z - r * 0.95);
-  const medal = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 8), gold);
-  medal.rotation.x = Math.PI / 2;
-  medal.position.y = -0.08;
-  pivot.add(medal);
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.03, 0), new THREE.MeshBasicMaterial({ color: 0xff2a14 }));
-  gem.position.set(0, -0.08, -0.015);
-  pivot.add(gem);
-  torso.add(pivot);
-  return pivot;
-}
-
 // A limb pivots at its top, so rotation.x swings it like a leg or an arm.
 function limb(w, h, d, mat, x, y, z) {
   const pivot = new THREE.Group();
@@ -140,8 +120,7 @@ function buildBrute() {
   armL.add(box(0.18, 0.16, 0.2, fur, 0, -0.06, 0));
   armR.add(box(0.18, 0.16, 0.2, fur, 0, -0.06, 0));
   torso.add(armL, armR);
-  const medal = addChain(torso, { y: 0.72, z: -0.03, r: 0.22 });
-  return { ...sk, armL, armR, eye, medal, lean: -0.12 };
+  return { ...sk, armL, armR, eye, lean: -0.12 };
 }
 
 function buildStalker() {
@@ -171,8 +150,7 @@ function buildStalker() {
   armL.add(box(0.16, 0.035, 0.17, paint, 0, -0.26, 0));
   armR.add(box(0.16, 0.035, 0.17, paint, 0, -0.26, 0));
   torso.add(armL, armR);
-  const medal = addChain(torso, { y: 0.72, z: -0.02, r: 0.2 });
-  return { ...sk, armL, armR, eye, medal, lean: -0.2 };
+  return { ...sk, armL, armR, eye, lean: -0.2 };
 }
 
 export function createCharacter(type) {
@@ -252,9 +230,6 @@ export function createCharacter(type) {
       rig.armL.rotation.x += (armA - rig.armL.rotation.x) * k;
       rig.armR.rotation.x += (armB - rig.armR.rotation.x) * k;
       rig.head.rotation.x += (headPitch - rig.head.rotation.x) * k;
-      // Medallion bounces off the chest with the stride and lifts in a slide or jump
-      const swingTarget = pose.slide ? 1.1 : !pose.ground ? 0.7 : (0.5 + 0.5 * Math.sin(phase * 2)) * 0.5 * swing;
-      rig.medal.rotation.x += (swingTarget - rig.medal.rotation.x) * Math.min(1, dt * 9);
       spear.visible = !!pose.hasSpear;
       sling.visible = pose.weapon === 'sling';
     },

@@ -29,7 +29,6 @@ export const BUSES = [
   { id: 'weapons', label: 'Weapons' },
   { id: 'hits', label: 'Kills & deaths' },
   { id: 'movement', label: 'Movement' },
-  { id: 'ambience', label: 'Cave ambience' },
   { id: 'ui', label: 'Interface' },
   { id: 'music', label: 'Music' },
 ];
@@ -42,12 +41,11 @@ const DEFAULTS = {
   res: 270,
   fullscreen: true,
   autoSprint: false,
-  chain: true,             // gold chain in first person
   musicTrack: 'shuffle',   // a TRACKS index or 'shuffle'
   map: 'random',           // arena for rooms you create: an ARENAS id or 'random'
   mode: 'dm',              // 'dm' (deathmatch) or 'relic' (Relic Run)
   binds: Object.fromEntries(ACTIONS.map((a) => [a.id, [...a.def]])),
-  volumes: { master: 0.7, weapons: 1, hits: 1, movement: 0.8, ambience: 0.45, ui: 0.8, music: 0.6 },
+  volumes: { master: 0.7, weapons: 1, hits: 1, movement: 0.8, ui: 0.8, music: 0.6 },
 };
 
 function load(key, fallback) {
@@ -131,10 +129,9 @@ export function setupSettingsPanel({ onPreview } = {}) {
   ];
   const res = $('set-res');
   res.addEventListener('change', () => { settings.res = +res.value; saveSettings('video'); });
-  const fs = $('set-fullscreen'), auto = $('set-autosprint'), chain = $('set-chain'), track = $('set-track');
+  const fs = $('set-fullscreen'), auto = $('set-autosprint'), track = $('set-track');
   fs.addEventListener('change', () => { settings.fullscreen = fs.checked; saveSettings('general'); });
   auto.addEventListener('change', () => { settings.autoSprint = auto.checked; saveSettings('general'); });
-  chain.addEventListener('change', () => { settings.chain = chain.checked; saveSettings('general'); });
   track.addEventListener('change', () => {
     settings.musicTrack = track.value === 'shuffle' ? 'shuffle' : +track.value;
     saveSettings('music');
@@ -143,7 +140,6 @@ export function setupSettingsPanel({ onPreview } = {}) {
     res.value = String(settings.res);
     fs.checked = settings.fullscreen;
     auto.checked = settings.autoSprint;
-    chain.checked = settings.chain;
     track.value = String(settings.musicTrack);
   });
 

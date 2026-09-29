@@ -173,12 +173,9 @@ server needed. The map, *The Quarry*, is open to a red night sky:
   drums, Rhodes-style chords, bass and vinyl crackle. They're new
   compositions in that style, not samples or covers. The beat muffles while
   you're dead or paused.
+- **No ambient sound:** you hear the fight and the beat, nothing else.
 - **Mixer:** Settings → Audio has sliders for master, weapons, kills &
-  deaths, movement, cave ambience, interface and music, plus a beat picker.
-- **Gold chain:** every fighter wears one. In first person, yours is a small
-  physics sim: it swings with you and whips into view on slides and hard
-  landings. It flashes on kills and jingles when it swings hard. Turn it off
-  under **Settings → General → Gold chain in first person**.
+  deaths, movement, interface and music, plus a beat picker.
 
 ## Layout
 
@@ -204,7 +201,6 @@ public/            The client (three.js, no build step)
   js/effects.js    Tracers, blood, embers, ground spears
   js/audio.js      Synthesised sound, mixer channels and the beats
   js/settings.js   Settings, keybinds, the Settings panel
-  js/chain.js      First-person gold chain (verlet rope)
   js/scan.js       The scan: eyes, wave, through-wall highlight
   js/skull.js      The relic: scanned skull (full-res pass), lead, dragging
   assets/          skull.glb (built by scripts/prepare-skull.mjs) + CREDITS

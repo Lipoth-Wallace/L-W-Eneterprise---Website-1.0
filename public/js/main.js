@@ -13,10 +13,9 @@ import { createCharacter, CHARACTER_INFO } from './characters.js';
 import { createViewmodel } from './viewmodel.js';
 import { createEffects } from './effects.js';
 import { createPost } from './post.js';
-import { initAudio, sfx, applyVolumes, playMusic, setMusicMuffled, setAmbience } from './audio.js';
+import { initAudio, sfx, applyVolumes, playMusic, setMusicMuffled } from './audio.js';
 import { setupMenu } from './menu.js';
 import { settings, actionsFor, onSettingsChange, keyName } from './settings.js';
-import { createChain } from './chain.js';
 import { createScan } from './scan.js';
 import { createSkull } from './skull.js';
 
@@ -28,7 +27,7 @@ const BOT_RESPAWN = 1.5;
 
 let renderer, post, camera;
 let scene = null, world = null, effects = null;
-let vm = null, chain = null, scan = null, skull = null;
+let vm = null, scan = null, skull = null;
 let game = null;
 
 const menu = setupMenu({ onStart: startMatch });
@@ -89,13 +88,11 @@ function loadMap(map) {
   scene = new THREE.Scene();
   world = buildWorld(scene, map);
   effects = createEffects(scene, map);
-  chain = createChain(scene);
   scan = createScan(scene, {
     boxes: map.boxes,
     onSplat: (point, normal) => { effects.impact(point, normal); effects.impact(point, normal); },
   });
   skull = map.relic ? createSkull(scene, renderer) : null;
-  setAmbience(map.id === 'kiln' ? 'cave' : 'outdoor');
 }
 
 function resize() {
@@ -174,7 +171,6 @@ function endMatch(message = '') {
   try { g.ws && g.ws.close(); } catch { /* already closed */ }
   for (const timer of g.localTimers || []) clearInterval(timer);
   sfx.setSliding(false);
-  setAmbience(null);
   $('bush-overlay').hidden = true;
   $('hud').hidden = true;
   if (document.pointerLockElement) document.exitPointerLock();
@@ -307,7 +303,6 @@ function respawnLocal(p, yaw) {
   cancelCharge();
   setWeapon('spear');
   game.eyeH = C.EYE_HEIGHT;
-  chain.reset();
   updateMuffle();
 }
 
@@ -424,7 +419,6 @@ function onEvent(ev) {
         }
       } else if (ev.killer === me) {
         sfx.kill();
-        chain.glint();
         showHitmarker();
         feed(`YOU ${VERBS[ev.w]} <b>${esc(victim)}</b>`);
       } else if (ev.victim === me) {
@@ -730,7 +724,6 @@ function killBot(bot, kind, dir) {
   bot.respawnAt = nowS() + BOT_RESPAWN;
   bot.model.group.visible = false;
   game.stats.hits++;
-  chain.glint();
   effects.blood(bot.p, [dir[0], 0.2, dir[2]]);
   sfx.kill();
   showHitmarker();
@@ -942,13 +935,8 @@ function update(dt, t) {
       if (ev.landed) {
         game.landDip = Math.min(0.22, Math.max(0, -vyBefore * 0.014));
         if (vyBefore < -4) sfx.land();
-        // A hard landing bounces the chain up toward your face
-        if (vyBefore < -6) chain.kick(0, Math.min(3.5, -vyBefore * 0.3), 0);
       }
-      if (ev.slid) {
-        sfx.slide();
-        chain.kick(-Math.sin(game.yaw) * 1.2, 2.2, -Math.cos(game.yaw) * 1.2);
-      }
+      if (ev.slid) sfx.slide();
     }
     game.sendAcc += dt;
     if (game.sendAcc >= 1 / C.STATE_RATE) {
@@ -1011,7 +999,6 @@ function update(dt, t) {
     if (kp) camera.lookAt(tmpV.set(kp[0], kp[1] + 1.2, kp[2]));
   }
   camera.updateMatrixWorld();
-  if (chain.update(dt, camera.position, game.yaw, camera, settings.chain && game.alive)) sfx.chain();
 
   const speedK = Math.max(0, Math.min(1, (hs - C.WALK_SPEED) / (C.MAX_SPEED - C.WALK_SPEED)));
   const chargeZoom = game.charging ? Math.min(1, (nowS() - game.chargeStart) / C.SPEAR_WINDUP) * 6 : 0;
