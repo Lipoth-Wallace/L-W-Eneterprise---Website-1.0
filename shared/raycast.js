@@ -108,7 +108,9 @@ export function rayPlayer(o, d, maxDist, target, pose = 'stand', bonus = 0) {
 // Extra hitbox size per weapon: the sling needs a clean hit, the thrown spear
 // is forgiving, and the stab gets a little reach for fights at speed.
 export function hitboxBonus(kind) {
-  return kind === 'throw' ? C.THROW_HITBOX_BONUS : kind === 'stab' ? C.STAB_HITBOX_BONUS : 0;
+  return {
+    throw: C.THROW_HITBOX_BONUS, stab: C.STAB_HITBOX_BONUS, knife: C.KNIFE_HITBOX_BONUS, bow: C.BOW_HITBOX_BONUS,
+  }[kind] || 0;
 }
 
 export function normalize(v) {

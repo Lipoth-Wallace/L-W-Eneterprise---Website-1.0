@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { createCharacter, CHARACTER_INFO } from './characters.js';
 import { settings, saveSettings, setupSettingsPanel } from './settings.js';
+import * as C from '/shared/constants.js';
 import { initAudio, playMusic, previewBus, currentTrackName } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,6 +12,8 @@ const $ = (id) => document.getElementById(id);
 export function setupMenu({ onStart }) {
   const menu = $('menu');
   const panel = setupSettingsPanel({ onPreview: previewBus });
+
+  setupLoadout();
 
   // Browsers only allow sound after the first click, so the beat starts then.
   const startAudio = () => {
@@ -151,4 +154,63 @@ export function setupMenu({ onStart }) {
       if (!running) { running = true; last = performance.now(); requestAnimationFrame(loop); }
     },
   };
+}
+
+// Loadout: slot 1 is always the spear; slot 2 is picked here. The stat bars
+// come from the real numbers in shared/constants.js (5 pips each).
+const GEAR = [
+  {
+    id: 'sling', name: 'SLING',
+    blurb: 'One stone at a time. Needs a clean hit on the exact body.',
+    rate: 1 / C.SLING_RELOAD, hitbox: 0, range: C.SLING_RANGE,
+    line: `${C.SLING_RELOAD} s reload · ${C.SLING_RANGE} m`,
+  },
+  {
+    id: 'knives', name: 'BONE KNIVES',
+    blurb: `${C.KNIFE_COUNT} throws in quick succession, a little more forgiving than the sling. Each grows back in ${C.KNIFE_REGEN} s.`,
+    rate: 1 / C.KNIFE_INTERVAL, hitbox: C.KNIFE_HITBOX_BONUS, range: C.KNIFE_RANGE,
+    line: `${C.KNIFE_COUNT} knives · ${C.KNIFE_RANGE} m`,
+  },
+  {
+    id: 'bow', name: 'HUNTING BOW',
+    blurb: 'Reloads faster than the sling and reaches furthest, but the arrow needs a much thinner line.',
+    rate: 1 / C.BOW_RELOAD, hitbox: C.BOW_HITBOX_BONUS, range: C.BOW_RANGE,
+    line: `${C.BOW_RELOAD} s reload · ${C.BOW_RANGE} m`,
+  },
+];
+
+function pips(v, lo, hi) {
+  const n = Math.max(1, Math.min(5, Math.round(1 + ((v - lo) / (hi - lo)) * 4)));
+  return '<span class="pips">' + [0, 1, 2, 3, 4].map((i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('') + '</span>';
+}
+
+function setupLoadout() {
+  const host = $('gear');
+  const rates = GEAR.map((g) => g.rate), boxes = GEAR.map((g) => g.hitbox), ranges = GEAR.map((g) => g.range);
+  const span = (a) => [Math.min(...a), Math.max(...a)];
+  for (const g of GEAR) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'gear';
+    b.setAttribute('role', 'radio');
+    b.dataset.gear = g.id;
+    b.innerHTML =
+      `<div class="slot-head"><span class="slot-key">2</span><b>${g.name}</b></div>` +
+      `<p>${g.blurb}</p>` +
+      `<div class="stats">` +
+      `<span>RATE</span>${pips(g.rate, ...span(rates))}` +
+      `<span>HITBOX</span>${pips(g.hitbox, ...span(boxes))}` +
+      `<span>RANGE</span>${pips(g.range, ...span(ranges))}` +
+      `</div><small>${g.line}</small>`;
+    b.addEventListener('click', () => { settings.secondary = g.id; saveSettings('general'); sync(); });
+    host.appendChild(b);
+  }
+  function sync() {
+    for (const b of host.children) {
+      const on = b.dataset.gear === settings.secondary;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', String(on));
+    }
+  }
+  sync();
 }

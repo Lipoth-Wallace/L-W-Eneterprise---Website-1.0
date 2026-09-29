@@ -1,7 +1,8 @@
 # Bloodflint
 
-A 1v1 online caveman arena shooter. Spear and sling, one-hit kills, slide-jump
-movement. Low-res brutalist cave lit red.
+A 1v1 online caveman arena shooter. A spear plus a sidearm of your choice
+(sling, bone knives or hunting bow), one-hit kills, slide-jump movement.
+Low-res brutalist cave lit red.
 
 ## Run it
 
@@ -30,7 +31,7 @@ Default controls (all rebindable under **Settings → Controls**):
 | `Shift` | Sprint. With **Auto sprint** on you always run, and Shift walks. |
 | `Ctrl` / `C` | Slide (crouch while moving) |
 | `Space` | Jump. Tap it as you land to bunny hop (bind the mouse wheel to jump for easier timing) |
-| `LMB` | Stab (spear out) or sling shot (sling out) |
+| `LMB` | Stab (spear out) or shoot slot 2; hold it to keep throwing knives |
 | `RMB` | Hold to draw the spear back (0.18 s), release to throw |
 | `F` | Quick stab from either weapon |
 | `E` | Scan (every 3.75 s) |
@@ -49,7 +50,17 @@ fullscreen.
   fatter hitbox than the sling (+0.45 m on every side) but costs you the
   spear until you walk over it. A spear that lands somewhere you can't reach
   flies back after 15 s. The server enforces the windup.
-- **Sling:** hitscan with an exact hitbox and a 0.8 s reload.
+- **Loadout:** the spear is always slot 1. Pick slot 2 on the title screen
+  (**Loadout**); the server checks you only fire what you picked.
+  - **Sling:** hitscan with an exact hitbox and a 0.8 s reload. 90 m.
+  - **Bone knives:** three throws in quick succession (0.18 s apart, or
+    hold the button), each a little fatter than the sling's hitbox
+    (+0.12 m). A knife grows back 1.2 s after the last. 45 m.
+  - **Hunting bow:** held flat. Reloads a little faster than the sling
+    (0.7 s), reaches furthest (120 m), but the arrow needs a much thinner
+    line: it shrinks the target box by 0.15 m on every side. Reloading, you
+    see each arrow slide in tip first along the bow and clip onto the
+    string with a click.
 - **Movement** rewards timing, not holding keys (think Straftat):
   - **Bunny hopping:** press jump in the tenth of a second before you land
     (or within 0.05 s after) and you keep all your speed. The speed readout
@@ -206,6 +217,7 @@ shared/            Code the server and browser both load
   physics.js       Player movement (box and cylinder colliders)
   raycast.js       Hitscan maths, per-pose turning hitboxes
   scan.js          Scan wave and cone maths
+  weapons.js       Loadout rules both sides share: ranges, reloads, knives
 public/            The client (three.js, no build step)
   js/main.js       Input, networking, interpolation, camera, HUD
   js/world.js      Cave scene built from shared/map.js

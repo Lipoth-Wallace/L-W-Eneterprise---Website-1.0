@@ -67,6 +67,20 @@ export const SPEAR_WINDUP = 0.18;        // hold RMB this long before the throw 
 export const WINDUP_TOLERANCE = 0.06;    // server slack for packet jitter
 export const SLING_RANGE = 90;
 export const SLING_RELOAD = 0.8;
+// Loadout: the spear is always slot 1; slot 2 is one of these
+export const SECONDARIES = ['sling', 'knives', 'bow'];
+// Bone knives: three throws in quick succession, a little fatter than the
+// sling's exact hitbox. Each knife grows back KNIFE_REGEN after the last.
+export const KNIFE_COUNT = 3;
+export const KNIFE_INTERVAL = 0.18;
+export const KNIFE_REGEN = 1.2;
+export const KNIFE_RANGE = 45;
+export const KNIFE_HITBOX_BONUS = 0.12;
+// Hunting bow: reloads a little faster than the sling, but the hitbox it
+// needs is much thinner (it shrinks the target box).
+export const BOW_RELOAD = 0.7;
+export const BOW_RANGE = 120;
+export const BOW_HITBOX_BONUS = -0.15;
 export const SPEAR_PICKUP_RADIUS = 1.5;
 export const SPEAR_RETURN_TIME = 15;     // an unreachable spear flies home after this
 

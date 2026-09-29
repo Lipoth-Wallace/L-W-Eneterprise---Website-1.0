@@ -48,7 +48,7 @@
     <div id="speed"><b id="speed-val">0</b><small>SPD</small></div>
     <div id="weapons">
       <div class="weapon" id="w-spear"><span class="key">1</span><span class="label">SPEAR</span><span class="state" id="spear-state">HELD</span></div>
-      <div class="weapon" id="w-sling"><span class="key">2</span><span class="label">SLING</span><span class="bar"><i id="sling-bar"></i></span></div>
+      <div class="weapon" id="w-sling"><span class="key">2</span><span class="label" id="slot2-label">SLING</span><span class="state" id="slot2-state"></span><span class="bar"><i id="sling-bar"></i></span></div>
       <div class="weapon scan" id="w-scan"><span class="key" id="scan-key">E</span><span class="label">SCAN</span><span class="bar"><i id="scan-bar"></i></span></div>
     </div>
     <div id="pause" hidden>
@@ -69,7 +69,7 @@
     <div class="menu-inner">
       <header>
         <h1>BLOOD<span>FLINT</span></h1>
-        <p class="tag">1v1 · SPEAR &amp; SLING · ONE HIT KILLS</p>
+        <p class="tag">1v1 · SPEAR &amp; SIDEARM · ONE HIT KILLS</p>
       </header>
 
       <section class="pick">
@@ -125,12 +125,23 @@
         </div>
       </section>
 
+      <section class="loadout" aria-labelledby="loadout-title">
+        <h2 id="loadout-title">LOADOUT</h2>
+        <div class="slots">
+          <div class="slot fixed">
+            <div class="slot-head"><span class="slot-key">1</span><b>SPEAR</b></div>
+            <p>Always carried. Stab up close, or hold to wind up and throw it; walk over it to pick it back up.</p>
+          </div>
+          <div class="slot-pick" id="gear" role="radiogroup" aria-label="Slot 2"></div>
+        </div>
+      </section>
+
       <section class="how">
         <div><kbd>WASD</kbd> move</div>
         <div><kbd>SHIFT</kbd> sprint</div>
         <div><kbd>CTRL</kbd>/<kbd>C</kbd> slide</div>
-        <div><kbd>SPACE</kbd> jump (hold to hop)</div>
-        <div><kbd>LMB</kbd> stab / sling</div>
+        <div><kbd>SPACE</kbd> jump (tap as you land to hop)</div>
+        <div><kbd>LMB</kbd> stab / shoot</div>
         <div><kbd>RMB</kbd> hold to draw, release to throw</div>
         <div><kbd>F</kbd> quick stab</div>
         <div><kbd>E</kbd> scan (every 3.75 s)</div>

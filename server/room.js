@@ -11,6 +11,7 @@
 import * as C from '../shared/constants.js';
 import { MAPS, ARENAS } from '../shared/map.js';
 import { rayMap, rayPlayer, poseOf, hitboxBonus, normalize, spearRestPoint } from '../shared/raycast.js';
+import { FIRE_KIND, RANGE, RELOAD, knifeBelt, knivesAt, takeKnife } from '../shared/weapons.js';
 
 const HISTORY_SECONDS = 1;
 const MAX_REPORTED_SPEED = C.MAX_SPEED * 1.35 + 4;   // generous: jitter bunches packets up
@@ -38,7 +39,7 @@ export class Room {
   get full() { return this.players.size >= 2; }
   get empty() { return this.players.size === 0; }
 
-  addPlayer(send, { name = 'Caveman', character = 'brute' } = {}) {
+  addPlayer(send, { name = 'Caveman', character = 'brute', secondary = 'sling' } = {}) {
     const id = nextPlayerId++;
     const taken = new Set([...this.players.values()].map((o) => o.team));
     const p = {
@@ -48,6 +49,7 @@ export class Room {
       send,
       name: String(name).replace(/[^\w \-]/g, '').slice(0, 16) || 'Caveman',
       character: C.CHARACTERS.includes(character) ? character : 'brute',
+      secondary: C.SECONDARIES.includes(secondary) ? secondary : 'sling',   // loadout slot 2
       x: 0, y: 0, z: 0, yaw: 0, pitch: 0,
       vx: 0, vz: 0,
       crouching: false, sliding: false, onGround: true,
@@ -58,7 +60,7 @@ export class Room {
       score: 0,
       lastStateAt: 0,
       history: [],
-      nextStab: 0, nextThrow: 0, nextSling: 0,
+      nextStab: 0, nextThrow: 0, nextSling: 0, nextKnife: 0, knives: knifeBelt(),
       charging: false, chargeAt: 0, nextScan: 0,
       spear: { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 },
       spawnSeq: 0,
@@ -111,7 +113,8 @@ export class Room {
     p.protectedUntil = t + C.SPAWN_PROTECTION;
     p.weapon = 'spear';
     p.spear = { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 };
-    p.nextStab = p.nextThrow = p.nextSling = t;
+    p.nextStab = p.nextThrow = p.nextSling = p.nextKnife = t;
+    p.knives = knifeBelt();
     p.charging = false;
     p.history = [];
     p.spawnSeq++;
@@ -167,7 +170,7 @@ export class Room {
     p.crouching = !!m.crouch;
     p.sliding = !!m.slide;
     p.onGround = !!m.ground;
-    if (m.weapon === 'spear' || m.weapon === 'sling') p.weapon = m.weapon;
+    if (m.weapon === 'spear' || m.weapon === p.secondary) p.weapon = m.weapon;
     if (Array.isArray(m.v)) { p.vx = +m.v[0] || 0; p.vz = +m.v[2] || 0; }
     p.lastStateAt = t;
     this.record(p, t);
@@ -196,7 +199,8 @@ export class Room {
     this.pushEvent({ e: 'scan', id: p.id, o, d: normalize(d) });
   }
 
-  // weapon: 'stab' | 'throw' | 'sling'. The origin is the shooter's eye as the
+  // weapon: 'stab' | 'throw' | 'sling' | 'knife' | 'bow'. The last three need
+  // the matching loadout (sling, knives, bow). The origin is the shooter's eye as the
   // client saw it; `time` is the server time of the remote pose they aimed at.
   handleFire(p, m) {
     const t = this.now();
@@ -205,8 +209,13 @@ export class Room {
     if (kind === 'stab' && (p.spear.state !== 'held' || t < p.nextStab)) return;
     if (kind === 'throw' && (p.spear.state !== 'held' || t < p.nextThrow || !p.charging ||
         t - p.chargeAt < C.SPEAR_WINDUP - C.WINDUP_TOLERANCE)) return;
-    if (kind === 'sling' && t < p.nextSling) return;
-    if (kind !== 'stab' && kind !== 'throw' && kind !== 'sling') return;
+    const ranged = kind === 'sling' || kind === 'knife' || kind === 'bow';
+    if (kind !== 'stab' && kind !== 'throw' && !ranged) return;
+    if (ranged && FIRE_KIND[p.secondary] !== kind) return;
+    // Sling and bow share one reload clock; knives have their own belt. A
+    // little slack for packet jitter.
+    if ((kind === 'sling' || kind === 'bow') && t < p.nextSling - 0.05) return;
+    if (kind === 'knife' && (t < p.nextKnife - C.KNIFE_INTERVAL * 0.5 || knivesAt(p.knives, t + 0.15) <= 0)) return;
 
     const o = (m.o || []).map(Number);
     let d = (m.d || []).map(Number);
@@ -217,10 +226,11 @@ export class Room {
 
     if (kind === 'stab') p.nextStab = t + C.STAB_COOLDOWN;
     if (kind === 'throw') { p.nextThrow = t + C.THROW_COOLDOWN; p.charging = false; }
-    if (kind === 'sling') p.nextSling = t + C.SLING_RELOAD;
+    if (kind === 'sling' || kind === 'bow') p.nextSling = t + RELOAD[kind];
+    if (kind === 'knife') { takeKnife(p.knives, t + 0.15); p.nextKnife = t + C.KNIFE_INTERVAL; }
     p.protectedUntil = 0;   // attacking ends spawn protection
 
-    const range = kind === 'stab' ? C.STAB_RANGE : kind === 'throw' ? C.THROW_RANGE : C.SLING_RANGE;
+    const range = RANGE[kind];
     const wall = rayMap(o, d, range, this.map.boxes);
     const foe = this.opponentOf(p);
     let hitFoe = false, foeT = Infinity;
@@ -236,7 +246,7 @@ export class Room {
     if (kind === 'throw') {
       const rest = hitFoe ? spearRestPoint([foe.x, foe.y + 0.2, foe.z], [0, 1, 0], this.map.boxes) : spearRestPoint(end, wall.normal, this.map.boxes);
       p.spear = { state: 'ground', p: rest, dir: [d[0], 0, d[2]], landedAt: t };
-      if (p.weapon === 'spear') p.weapon = 'sling';
+      if (p.weapon === 'spear') p.weapon = p.secondary;
     }
 
     this.pushEvent({ e: 'shot', id: p.id, w: kind, o, end, hit: hitFoe, n: hitFoe ? null : wall.normal });

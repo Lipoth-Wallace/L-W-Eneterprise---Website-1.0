@@ -40,6 +40,34 @@ function limb(w, h, d, mat, x, y, z) {
   return pivot;
 }
 
+/** A bone knife: a pale, slightly curved blade with a wrapped grip, tip toward -Z. */
+export function makeKnifeMesh(scale = 1) {
+  const g = new THREE.Group();
+  const bone = lam(0xe0d2b4);
+  const blade = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.2, 4), bone);
+  blade.rotation.x = -Math.PI / 2;
+  blade.scale.set(1, 1, 0.4);
+  blade.position.z = -0.1;
+  g.add(blade);
+  g.add(box(0.03, 0.02, 0.09, lam(0x3a2418), 0, 0, 0.04));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** An arrow along -Z: nock at z = 0, flint tip at z = -len. */
+export function makeArrowMesh(len = 0.72) {
+  const g = new THREE.Group();
+  g.add(box(0.012, 0.012, len, lam(0x8a6a44), 0, 0, -len / 2));
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.07, 4), lam(0x2a2826));
+  tip.rotation.x = -Math.PI / 2;
+  tip.position.z = -len - 0.03;
+  g.add(tip);
+  const fletch = lam(0xb4140a);
+  g.add(box(0.001, 0.035, 0.09, fletch, 0, 0.012, -0.07));
+  g.add(box(0.035, 0.001, 0.09, fletch, 0, 0, -0.07));
+  return g;
+}
+
 export function makeSpearMesh(scale = 1) {
   const g = new THREE.Group();
   const shaft = box(0.05 * scale, 0.05 * scale, 1.7 * scale, lam(0x5a3a22));
@@ -172,6 +200,31 @@ export function createCharacter(type) {
   sling.userData.cosmetic = true;
   rig.armL.add(sling);
 
+  // Bone knives: a small fan in the left hand
+  const knives = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const kn = makeKnifeMesh(1.3);
+    kn.rotation.set(Math.PI / 2, 0, -0.3 + i * 0.3);
+    knives.add(kn);
+  }
+  knives.position.set(0, -0.66, 0);
+  knives.userData.cosmetic = true;
+  rig.armL.add(knives);
+
+  // Hunting bow: held flat in the left hand, with an arrow along it
+  const bow = new THREE.Group();
+  const limbs = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.02, 4, 14, 1.5), lam(0x5a3a22));
+  limbs.rotation.set(0, 0, Math.PI / 2 - 0.75);
+  limbs.position.y = -0.3;
+  bow.add(limbs);
+  const shaft = makeArrowMesh(0.8);
+  shaft.rotation.x = Math.PI / 2;
+  shaft.position.y = 0.2;
+  bow.add(shaft);
+  bow.position.set(0, -0.66, -0.05);
+  bow.userData.cosmetic = true;
+  rig.armL.add(bow);
+
   let phase = 0;
   const state = { speed: 0 };
   const kneeL = rig.legL.userData.knee, kneeR = rig.legR.userData.knee;
@@ -215,7 +268,8 @@ export function createCharacter(type) {
       if (pose.weapon === 'spear' && pose.hasSpear) armB = 1.1;
       // Winding up a throw: the arm cocks back over the shoulder. This is the tell.
       if (pose.charge && pose.hasSpear) armB = -1.9;
-      if (pose.weapon === 'sling') armA = 1.0;
+      if (pose.weapon === 'sling' || pose.weapon === 'knives') armA = 1.0;
+      if (pose.weapon === 'bow') armA = 1.5;   // bow arm out level, bow flat
       // Keep the head roughly level in the world, then tilt it toward the aim.
       const headPitch = Math.max(-0.6, Math.min(0.6, (pose.pitch || 0) * 0.5)) - lean;
 
@@ -232,6 +286,8 @@ export function createCharacter(type) {
       rig.head.rotation.x += (headPitch - rig.head.rotation.x) * k;
       spear.visible = !!pose.hasSpear;
       sling.visible = pose.weapon === 'sling';
+      knives.visible = pose.weapon === 'knives';
+      bow.visible = pose.weapon === 'bow';
     },
   };
 }

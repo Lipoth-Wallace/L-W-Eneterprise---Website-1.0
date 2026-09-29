@@ -8,6 +8,7 @@ import * as C from '/shared/constants.js';
 import { MAPS } from '/shared/map.js';
 import { createPlayerState, stepPlayer, eyeHeight } from '/shared/physics.js';
 import { rayMap, rayPlayer, aimDir, poseOf, hitboxBonus, spearRestPoint } from '/shared/raycast.js';
+import { FIRE_KIND, RANGE, RELOAD, knifeBelt, knivesAt, takeKnife } from '/shared/weapons.js';
 import { buildWorld } from './world.js';
 import { createCharacter, CHARACTER_INFO } from './characters.js';
 import { createViewmodel } from './viewmodel.js';
@@ -22,7 +23,7 @@ import { createSkull } from './skull.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const PHYS_DT = 1 / 120;
-const VERBS = { stab: 'gutted', throw: 'skewered', sling: 'stoned', skull: 'burst' };
+const VERBS = { stab: 'gutted', throw: 'skewered', sling: 'stoned', knife: 'shanked', bow: 'pinned', skull: 'burst' };
 const BOT_RESPAWN = 1.5;
 
 let renderer, post, camera;
@@ -40,7 +41,7 @@ const nowS = () => (performance.now() / 1000) * TIME_SCALE;
 // ?debug exposes hooks for automated browser tests.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__bf = {
-    get game() { return game; }, tryStab, trySling, tryScan, startCharge, releaseCharge,
+    get game() { return game; }, tryStab, tryRanged, tryScan, setWeapon, startCharge, releaseCharge,
     get camera() { return camera; },
   };
 }
@@ -125,7 +126,7 @@ function startMatch(opts) {
   const map = practice ? MAPS[opts.practiceMap] || MAPS.range : relicMode ? MAPS.volcano : MAPS[settings.map] || MAPS.kiln;
   loadMap(map);
   menu.hide();
-  vm = createViewmodel(settings.character);
+  vm = createViewmodel(settings.character, settings.secondary);
   const sp = map.spawns[0];
   game = {
     settings, opts, map, mode: practice ? 'practice' : 'online',
@@ -133,6 +134,9 @@ function startMatch(opts) {
     local: createPlayerState(sp.p, sp.yaw),
     yaw: sp.yaw, pitch: 0,
     alive: practice, weapon: 'spear', hasSpear: true, lastThrow: -10,
+    // Loadout slot 2 (sling, knives or bow). nextSling is the reload clock the
+    // sling and the bow share; the knives have their own belt.
+    secondary: settings.secondary, knives: knifeBelt(), nextKnife: 0, nockPlayed: true,
     nextStab: 0, nextThrow: 0, nextSling: 0, reloadedPlayed: true,
     charging: false, chargeStart: 0, throwQueued: false, nextScan: 0,
     inBush: null, rustleAt: 0,
@@ -207,7 +211,7 @@ function connect(opts) {
   if (opts.local) { connectLocal(opts); return; }
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   game.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map, mode: opts.mode || settings.mode, grace: settings.grace }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map, mode: opts.mode || settings.mode, grace: settings.grace, secondary: settings.secondary }));
   ws.onmessage = (ev) => { if (game && game.ws === ws) onMessage(JSON.parse(ev.data)); };
   ws.onclose = () => { if (game && game.ws === ws) endMatch(game.myId ? 'Connection lost.' : 'Could not reach the server.'); };
 }
@@ -228,7 +232,7 @@ async function connectLocal(opts) {
   const deliver = (msg) => queueMicrotask(() => { if (game === g) onMessage(msg); });
   const reply = (msg) => deliver(JSON.parse(JSON.stringify(msg)));
   reply.raw = (text) => deliver(JSON.parse(text));
-  const me = room.addPlayer(reply, { name: settings.name, character: settings.character });
+  const me = room.addPlayer(reply, { name: settings.name, character: settings.character, secondary: settings.secondary });
   g.localRoom = room;   // reachable from ?debug test hooks via game.localRoom
   g.localLink = {
     receive(m) {
@@ -300,6 +304,8 @@ function respawnLocal(p, yaw) {
   game.hasSpear = true;
   game.lastThrow = -10;
   game.nextSling = 0;
+  game.knives = knifeBelt();
+  game.nextKnife = 0;
   game.reloadedPlayed = true;
   cancelCharge();
   setWeapon('spear');
@@ -325,7 +331,7 @@ function onSnap(m) {
       if (nowS() - game.lastThrow > 0.6) {
         const had = game.hasSpear;
         game.hasSpear = !pl.sp;
-        if (!game.hasSpear && had && game.weapon === 'spear') setWeapon('sling');
+        if (!game.hasSpear && had && game.weapon === 'spear') setWeapon(game.secondary);
       }
       game.mySpear = pl.sp;
       game.respawnIn = pl.rs;
@@ -389,6 +395,8 @@ function onEvent(ev) {
       const [dist, pan] = relAudio(ev.o);
       const from = [ev.o[0], ev.o[1] - 0.25, ev.o[2]];
       if (ev.w === 'sling') { effects.tracer(from, ev.end, 0xd8ccb0); sfx.sling(dist, pan); }
+      if (ev.w === 'knife') { effects.tracer(from, ev.end, 0xe8dcc4, 2, 0.12); sfx.knife(dist, pan); }
+      if (ev.w === 'bow') { effects.tracer(from, ev.end, 0xb08a5a, 1, 0.16); sfx.bow(dist, pan); }
       if (ev.w === 'throw') { effects.tracer(from, ev.end, 0xff5a22, 2, 0.22); sfx.throwSpear(dist, pan); }
       if (ev.w === 'stab') sfx.stab(dist, pan);
       if (!ev.hit && ev.n && ev.w !== 'stab') effects.impact(ev.end, ev.n);
@@ -497,13 +505,13 @@ function onActionPress(action) {
   switch (action) {
     case 'attack':
       if (game.charging) cancelCharge();
-      if (game.weapon === 'spear') tryStab(); else trySling();
+      if (game.weapon === 'spear') tryStab(); else tryRanged();
       break;
     case 'throw': startCharge(); break;
     case 'quickStab': tryStab(); break;
-    case 'swap': setWeapon(game.weapon === 'spear' ? 'sling' : 'spear'); break;
+    case 'swap': setWeapon(game.weapon === 'spear' ? game.secondary : 'spear'); break;
     case 'spear': setWeapon('spear'); break;
-    case 'sling': setWeapon('sling'); break;
+    case 'sling': setWeapon(game.secondary); break;   // 'sling' is the slot-2 action
     case 'reset': if (game.mode === 'practice') resetCourse(); break;
     case 'scan': tryScan(); break;
   }
@@ -558,7 +566,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('wheel', (e) => {
   if (!game || !locked() || !game.alive || !e.deltaY) return;
   const acts = actionsFor(e.deltaY > 0 ? 'WheelDown' : 'WheelUp');
-  if (!acts.length) { setWeapon(game.weapon === 'spear' ? 'sling' : 'spear'); return; }
+  if (!acts.length) { setWeapon(game.weapon === 'spear' ? game.secondary : 'spear'); return; }
   for (const a of acts) {
     if (a === 'jump') game.jumpPulse = 1;
     else { onActionPress(a); onActionRelease(a); }
@@ -607,12 +615,20 @@ function tryScan() {
   sfx.scan();
 }
 
-function trySling() {
+// Slot 2: a sling stone, a bone knife or an arrow
+function tryRanged() {
   const t = nowS();
+  if (game.secondary === 'knives') {
+    if (t < game.nextKnife || !takeKnife(game.knives, t)) return;
+    game.nextKnife = t + C.KNIFE_INTERVAL;
+    fire('knife');
+    return;
+  }
   if (t < game.nextSling) return;
-  game.nextSling = t + C.SLING_RELOAD;
+  game.nextSling = t + RELOAD[game.secondary];
   game.reloadedPlayed = false;
-  fire('sling');
+  game.nockPlayed = false;
+  fire(FIRE_KIND[game.secondary]);
 }
 
 // Hold RMB to wind the spear back; release once it's ready to throw. Letting
@@ -648,7 +664,7 @@ function throwSpear() {
   fire('throw');
   game.hasSpear = false;
   game.lastThrow = t;
-  setWeapon('sling');
+  setWeapon(game.secondary);
 }
 
 // Everything a shot could hit besides the map: remote players online, targets
@@ -674,7 +690,7 @@ function fire(kind) {
 
   // Draw it straight away from our own ray. Online, the server's verdict
   // arrives as a kill event; in practice this ray is the verdict.
-  const range = kind === 'stab' ? C.STAB_RANGE : kind === 'throw' ? C.THROW_RANGE : C.SLING_RANGE;
+  const range = RANGE[kind];
   const wall = rayMap(eye, d, range, boxes);
   let endT = Math.min(wall.t, range), hit = null;
   for (const target of hitTargets()) {
@@ -683,7 +699,7 @@ function fire(kind) {
   }
   const end = [eye[0] + d[0] * endT, eye[1] + d[1] * endT, eye[2] + d[2] * endT];
   const rx = Math.cos(game.yaw), rz = -Math.sin(game.yaw);
-  const side = kind === 'sling' ? -0.22 : 0.25;
+  const side = kind === 'stab' || kind === 'throw' ? 0.25 : -0.22;
   const muzzle = [eye[0] + rx * side + d[0] * 0.6, eye[1] - 0.2 + d[1] * 0.6, eye[2] + rz * side + d[2] * 0.6];
   const hitWall = !hit && wall.t <= range;
 
@@ -691,6 +707,14 @@ function fire(kind) {
     vm.slingShot();
     sfx.sling();
     effects.tracer(muzzle, end, 0xd8ccb0);
+  } else if (kind === 'knife') {
+    vm.knifeThrow();
+    sfx.knife();
+    effects.tracer(muzzle, end, 0xe8dcc4, 2, 0.12);
+  } else if (kind === 'bow') {
+    vm.bowShot();
+    sfx.bow();
+    effects.tracer(muzzle, end, 0xb08a5a, 1, 0.16);
   } else if (kind === 'throw') {
     vm.throwSpear();
     sfx.throwSpear();
@@ -967,6 +991,10 @@ function update(dt, t) {
     sfx.setSliding(L.sliding && L.onGround);
     if (L.sliding && L.onGround) effects.slideSparks(tmpV.set(L.x, L.y + 0.05, L.z), { x: L.vx, z: L.vz });
     if (!game.reloadedPlayed && nowS() >= game.nextSling) { game.reloadedPlayed = true; sfx.reloaded(); }
+    // The bow: the click of the arrow's nock clipping onto the string
+    if (game.secondary === 'bow' && !game.nockPlayed && nowS() >= game.nextSling - C.BOW_RELOAD * 0.4) { game.nockPlayed = true; sfx.nock(); }
+    // Holding attack with knives keeps throwing, as fast as the belt allows
+    if (game.secondary === 'knives' && game.weapon === 'knives' && held('attack')) tryRanged();
 
     if (game.charging) {
       const progress = Math.min(1, (nowS() - game.chargeStart) / C.SPEAR_WINDUP);
@@ -1019,7 +1047,10 @@ function update(dt, t) {
   camera.updateProjectionMatrix();
 
   vm.scene.visible = game.alive;
-  vm.update(dt, game.hasSpear, { speed: hs, ground: L.onGround, slide: L.sliding }, Math.max(0, game.nextSling - nowS()));
+  vm.update(dt, game.hasSpear, { speed: hs, ground: L.onGround, slide: L.sliding }, {
+    reloadLeft: Math.max(0, game.nextSling - nowS()),
+    knives: knivesAt(game.knives, nowS()),
+  });
 
   if (skull) {
     const r = game.relic || { st: 'home', p: game.map.relic.p, by: null };
@@ -1077,7 +1108,8 @@ function updateHud(hs, t) {
   $('speed').className = (spd >= 18 ? 'faster' : spd >= 12 ? 'fast' : '') + (nowS() - (game.perfectAt || 0) < 0.25 ? ' perfect' : '');
 
   $('w-spear').classList.toggle('active', game.weapon === 'spear');
-  $('w-sling').classList.toggle('active', game.weapon === 'sling');
+  $('w-sling').classList.toggle('active', game.weapon === game.secondary);
+  setText('slot2-label', { sling: 'SLING', knives: 'KNIVES', bow: 'BOW' }[game.secondary]);
   const chargeK = game.charging ? Math.min(1, (nowS() - game.chargeStart) / C.SPEAR_WINDUP) : 0;
   setText('spear-state', !game.hasSpear ? 'THROWN' : chargeK >= 1 ? 'READY' : game.charging ? 'DRAWING' : 'HELD');
   $('spear-state').classList.toggle('gone', !game.hasSpear);
@@ -1086,10 +1118,21 @@ function updateHud(hs, t) {
   $('scan-bar').classList.toggle('loading', scanLeft > 0);
   $('w-scan').classList.toggle('ready', scanLeft <= 0);
   setText('scan-key', keyName(settings.binds.scan[0]));
-  const reloadLeft = Math.max(0, game.nextSling - nowS());
+  // Slot 2's bar: the reload, or for knives the belt (a third per knife,
+  // with the next one growing in)
   const bar = $('sling-bar');
-  bar.style.width = `${Math.round((1 - reloadLeft / C.SLING_RELOAD) * 100)}%`;
-  bar.classList.toggle('loading', reloadLeft > 0);
+  if (game.secondary === 'knives') {
+    const t = nowS(), n = knivesAt(game.knives, t);
+    const growing = n < C.KNIFE_COUNT ? 1 - Math.max(0, game.knives.refillAt - t) / C.KNIFE_REGEN : 0;
+    bar.style.width = `${Math.round(((n + growing) / C.KNIFE_COUNT) * 100)}%`;
+    bar.classList.toggle('loading', n === 0);
+    setText('slot2-state', `×${n}`);
+  } else {
+    const reloadLeft = Math.max(0, game.nextSling - nowS());
+    bar.style.width = `${Math.round((1 - reloadLeft / RELOAD[game.secondary]) * 100)}%`;
+    bar.classList.toggle('loading', reloadLeft > 0);
+    setText('slot2-state', '');
+  }
 
   // Crosshair turns ember when a stab would land
   let inReach = false;

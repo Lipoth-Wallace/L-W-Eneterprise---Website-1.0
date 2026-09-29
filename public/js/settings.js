@@ -14,13 +14,13 @@ export const ACTIONS = [
   { id: 'jump', label: 'Jump (hold to hop)', def: ['Space', null] },
   { id: 'slide', label: 'Slide / crouch', def: ['ControlLeft', 'KeyC'] },
   { id: 'sprint', label: 'Sprint (walk, with auto sprint)', def: ['ShiftLeft', null] },
-  { id: 'attack', label: 'Stab / sling shot', def: ['Mouse0', null] },
+  { id: 'attack', label: 'Stab / shoot (hold to keep throwing knives)', def: ['Mouse0', null] },
   { id: 'throw', label: 'Charge & throw spear', def: ['Mouse2', null] },
   { id: 'quickStab', label: 'Quick stab', def: ['KeyF', null] },
   { id: 'scan', label: 'Scan (sense enemies)', def: ['KeyE', null] },
   { id: 'swap', label: 'Swap weapon', def: ['KeyQ', null] },
   { id: 'spear', label: 'Equip spear', def: ['Digit1', null] },
-  { id: 'sling', label: 'Equip sling', def: ['Digit2', null] },
+  { id: 'sling', label: 'Equip slot 2 (sling, knives or bow)', def: ['Digit2', null] },
   { id: 'reset', label: 'Restart course (practice)', def: ['KeyR', null] },
 ];
 
@@ -41,6 +41,7 @@ const DEFAULTS = {
   res: 270,
   fullscreen: true,
   autoSprint: false,
+  secondary: 'sling',      // loadout slot 2: sling, knives or bow
   grace: 3,                // Relic Run burst countdown when you host (seconds)
   musicTrack: 'shuffle',   // a TRACKS index or 'shuffle'
   map: 'random',           // arena for rooms you create: an ARENAS id or 'random'

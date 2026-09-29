@@ -44,6 +44,35 @@ h1 span { color: var(--blood); }
 .pick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
 @media (max-width: 720px) { .pick { grid-template-columns: 1fr; } }
 
+/* Loadout: slot 1 fixed, slot 2 a row of three picks */
+.loadout { margin-top: 20px; background: var(--panel); border: 2px solid var(--line); padding: 16px; box-shadow: 6px 6px 0 rgba(0,0,0,0.6); }
+.loadout h2 { font-family: var(--pixel); font-size: 14px; letter-spacing: 3px; color: var(--dim); margin: 0 0 12px; font-weight: 700; }
+.slots { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 12px; }
+.slot-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .slots { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .slot-pick { grid-template-columns: 1fr; } }
+.slot, .gear {
+  display: flex; flex-direction: column; gap: 6px; text-align: left; min-width: 0;
+  background: #140505; border: 2px solid var(--line); padding: 10px 12px; color: var(--text);
+  font-family: var(--term); font-size: 18px;
+}
+.slot p, .gear p { margin: 0; color: var(--dim); line-height: 1.1; }
+.slot.fixed { border-style: dashed; }
+.gear { cursor: pointer; }
+.gear:hover { border-color: var(--blood); }
+.gear:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.gear.active { border-color: var(--ember); background: #2a0a06; box-shadow: inset 0 0 0 1px var(--ember); }
+.slot-head { display: flex; align-items: center; gap: 8px; }
+.slot-head b { font-family: var(--pixel); font-size: 15px; letter-spacing: 2px; color: var(--bone); }
+.gear.active .slot-head b { color: #fff; }
+.slot-key { font-family: var(--pixel); font-size: 11px; color: var(--bone); background: #200a08; border: 1px solid var(--line); padding: 1px 5px; }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; align-items: center; font-family: var(--pixel); font-size: 10px; letter-spacing: 1px; color: var(--dim); }
+.pips { display: flex; gap: 3px; }
+.pips i { width: 14px; height: 8px; background: #2a0c08; }
+.pips i.on { background: var(--blood); }
+.gear.active .pips i.on { background: var(--ember); }
+.gear small { color: var(--bone); font-size: 16px; }
+
 .preview-wrap, .controls-col, .how {
   background: var(--panel); border: 2px solid var(--line); padding: 16px;
   box-shadow: 6px 6px 0 rgba(0,0,0,0.6);

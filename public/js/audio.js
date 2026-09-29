@@ -109,6 +109,24 @@ export const sfx = {
     noiseHit({ freq: 2500, sweepTo: 600, q: 2, peak: 0.5 * k, decay: 0.18, pan });
     noiseHit({ freq: 3000, type: 'highpass', peak: 0.35 * k, decay: 0.05, pan });
   },
+  // A bone knife: a short spinning whoosh
+  knife(dist, pan = 0) {
+    const k = falloff(dist);
+    noiseHit({ freq: 1800, sweepTo: 900, q: 3, peak: 0.35 * k, decay: 0.12, pan });
+    noiseHit({ freq: 1400, sweepTo: 700, q: 3, peak: 0.2 * k, decay: 0.1, pan, at: ctx && ctx.currentTime + 0.05 });
+  },
+  // The bow: a low string twang and the arrow's hiss
+  bow(dist, pan = 0) {
+    const k = falloff(dist);
+    tone(110, 0.22, 'triangle', 0.35 * k, 0.8, pan);
+    tone(220, 0.1, 'sine', 0.15 * k, 0.9, pan);
+    noiseHit({ freq: 4000, sweepTo: 2000, q: 1.5, peak: 0.2 * k, decay: 0.12, pan });
+  },
+  // Clipping the arrow's nock onto the string
+  nock() {
+    tone(1300, 0.02, 'triangle', 0.12, 0.7, 0, 'weapons');
+    noiseHit({ freq: 2500, q: 3, peak: 0.12, decay: 0.02 });
+  },
   throwSpear(dist, pan = 0) {
     const k = falloff(dist);
     noiseHit({ freq: 700, sweepTo: 250, q: 1.5, peak: 0.6 * k, decay: 0.28, pan });

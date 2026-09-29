@@ -83,7 +83,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
         const found = findRoom(m.room, m.private, m.map, m.mode, m.grace);
         if (found.error) { send({ t: 'error', message: found.error }); return; }
         room = found.room;
-        player = room.addPlayer(send, { name: m.name, character: m.character });
+        player = room.addPlayer(send, { name: m.name, character: m.character, secondary: m.secondary });
         log(`[${room.code}] ${player.name} joined (${room.players.size}/2)`);
         return;
       }
