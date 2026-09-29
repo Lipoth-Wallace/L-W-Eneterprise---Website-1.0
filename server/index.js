@@ -39,24 +39,25 @@ export function startServer({ port = PORT, log = console.log } = {}) {
 
   // mapPref: an arena id, or 'random'. Joining by code always uses that
   // room's map; quick match prefers a waiting room on the map you picked.
-  function findRoom(requested, wantPrivate, mapPref) {
+  function findRoom(requested, wantPrivate, mapPref, modePref) {
+    const mode = modePref === 'relic' ? 'relic' : 'dm';
     const pick = ARENAS.includes(mapPref) ? mapPref : ARENAS[Math.floor(Math.random() * ARENAS.length)];
     if (requested) {
       const code = String(requested).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const r = rooms.get(code);
       if (r) return r.full ? { error: 'That room is full.' } : { room: r };
       if (code.length !== 4) return { error: 'Room codes are four letters.' };
-      const created = new Room(code, { isPrivate: true, map: pick });
+      const created = new Room(code, { isPrivate: true, map: pick, mode });
       rooms.set(code, created);
       return { room: created };
     }
     if (!wantPrivate) {
-      const waiting = [...rooms.values()].filter((r) => !r.isPrivate && r.players.size === 1);
+      const waiting = [...rooms.values()].filter((r) => !r.isPrivate && r.players.size === 1 && r.mode === mode);
       const match = waiting.find((r) => mapPref === 'random' || r.map.id === mapPref) || waiting[0];
       if (match) return { room: match };
     }
     const code = makeCode();
-    const created = new Room(code, { isPrivate: !!wantPrivate, map: pick });
+    const created = new Room(code, { isPrivate: !!wantPrivate, map: pick, mode });
     rooms.set(code, created);
     return { room: created };
   }
@@ -77,7 +78,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       if (!m || typeof m !== 'object') return;
 
       if (m.t === 'join' && !room) {
-        const found = findRoom(m.room, m.private, m.map);
+        const found = findRoom(m.room, m.private, m.map, m.mode);
         if (found.error) { send({ t: 'error', message: found.error }); return; }
         room = found.room;
         player = room.addPlayer(send, { name: m.name, character: m.character });

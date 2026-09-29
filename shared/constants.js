@@ -71,4 +71,12 @@ export const RESPAWN_TIME = 2;
 export const MATCH_RESET_TIME = 7;
 export const SPAWN_PROTECTION = 0.75;
 
+// Relic Run: race to the crater, grab the skull, drag it home
+export const RELIC_TO_WIN = 3;
+export const RELIC_GRAB_RADIUS = 2.0;
+export const RELIC_CARRY_MULT = 0.75;   // dragging it costs 25% of your speed
+export const RELIC_RETURN = 25;         // a dropped skull no one touches goes back to the crater
+export const RELIC_RESET_DELAY = 3;     // after a capture, before it reappears
+export const RELIC_LEAD = 2.6;          // length of the lead it's dragged on
+
 export const CHARACTERS = ['brute', 'stalker'];

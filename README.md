@@ -98,6 +98,32 @@ was created with, and anyone who joins by code plays on that map.
   see out through faded leaves, they see a solid bush. Stones still go
   through foliage, moving inside a bush rustles, and a scan will find you.
 
+## Relic Run
+
+A second mode, picked on the title screen, played on **the Caldera**: a
+225 x 225 m volcanic map (2.5x the Thicket on each side).
+
+- A giant human skull hovers in the crater at the summit. Touch it and it's
+  yours, dragged behind you on a lead. **Dragging it costs 25% of your
+  speed.** Drag it into **your own cave** to score: west cave for the first
+  player, east cave for the second. First to 3 captures wins. Kills don't
+  score, but killing the carrier makes them drop the skull where they fell,
+  and anyone can grab it. A skull nobody touches for 25 s goes back to the
+  crater.
+- An enemy scan shows the skull carrier as a **dark red** ghost and mist
+  instead of amber.
+- The volcano has four levels: the plains, two terraces and the crater rim.
+  Sprint straight up the stairs (every step is under the auto-step height),
+  or use the glowing **launch pads** on the diagonals, which fling you a whole
+  tier up. The pads also work while you're carrying the skull.
+  `test/volcano.test.js` plays the climb and every pad, with and without the
+  skull.
+- The skull is sculpted: carved sockets that fall into shadow, pinprick
+  pupils that follow whoever looks at it, a jaw that clacks at irregular
+  intervals and chatters while it's dragged, and a slow breathing swell.
+- It's 1v1 for now: each "team" is one player. Real teams (2v2 and up) need
+  the server's rooms, spawns and scoring reworked around teams.
+
 ## Practice range
 
 **Practice range** on the title screen runs offline in the browser, with no
@@ -138,6 +164,7 @@ shared/            Code the server and browser both load
   map.js           Map registry (arenas + practice map)
   maps/kiln.js     The Kiln: 1v1 cave arena
   maps/thicket.js  The Thicket: 1v1 forest arena
+  maps/volcano.js  The Caldera: Relic Run map
   maps/range.js    The Quarry: practice range and parkour course
   physics.js       Player movement
   raycast.js       Hitscan maths, per-pose turning hitboxes
@@ -153,6 +180,7 @@ public/            The client (three.js, no build step)
   js/settings.js   Settings, keybinds, the Settings panel
   js/chain.js      First-person gold chain (verlet rope)
   js/scan.js       The scan: eyes, wave, through-wall highlight
+  js/skull.js      The relic: sculpted skull, lead, dragging
 test/              node:test suites
 ```
 
@@ -177,8 +205,9 @@ for the server to also run `shared/physics.js` on submitted inputs.
 `npm run build:offline` bundles the whole client into one self-contained
 HTML file (`dist/bloodflint-offline.html`). It has no server, so the online
 buttons are hidden. It keeps the practice range, the parkour course, and solo
-walks of the Kiln and the Thicket, which is handy for a quick look in any
-browser.
+walks of the Kiln, the Thicket and the Caldera, plus a **Solo Relic Run**
+that runs the real server rules inside the page. Handy for a quick look in
+any browser.
 
 ## Deploy
 

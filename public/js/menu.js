@@ -84,6 +84,12 @@ export function setupMenu({ onStart }) {
   const arena = $('arena');
   arena.value = settings.map;
   arena.addEventListener('change', () => { settings.map = arena.value; saveSettings('general'); });
+  // Relic Run always plays on the Caldera, so the arena picker only matters for deathmatch.
+  const mode = $('mode');
+  mode.value = settings.mode;
+  const syncMode = () => { arena.closest('label').hidden = settings.mode === 'relic' || !!globalThis.BLOODFLINT_OFFLINE; };
+  syncMode();
+  mode.addEventListener('change', () => { settings.mode = mode.value; saveSettings('general'); syncMode(); });
 
   const code = $('code');
   const urlRoom = new URLSearchParams(location.search).get('room');
@@ -107,7 +113,13 @@ export function setupMenu({ onStart }) {
     note.className = 'offline-note';
     note.textContent = 'Offline test build: 1v1 needs the game server. Try the range, the course, and the arenas solo.';
     $('practice').before(note);
-    for (const [id, label] of [['kiln', 'Explore the Kiln'], ['thicket', 'Explore the Thicket']]) {
+    $('mode').closest('label').hidden = true;
+    const relic = document.createElement('button');
+    relic.className = 'btn';
+    relic.textContent = 'Solo Relic Run';
+    relic.addEventListener('click', () => start({ local: true, mode: 'relic' }));
+    $('open-settings').before(relic);
+    for (const [id, label] of [['kiln', 'Explore the Kiln'], ['thicket', 'Explore the Thicket'], ['volcano', 'Explore the Caldera']]) {
       const b = document.createElement('button');
       b.className = 'btn';
       b.textContent = label;

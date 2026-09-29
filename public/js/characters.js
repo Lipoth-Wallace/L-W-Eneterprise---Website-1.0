@@ -311,6 +311,9 @@ void main() {
   gl_FragColor = vec4(uColor * a, 1.0);
 }`;
 
+const AMBER_GHOST = new THREE.Color(0xff8a00).multiplyScalar(1.4);
+const BLOOD_GHOST = new THREE.Color(0x8a0a04).multiplyScalar(1.3);
+
 function createGhost(root) {
   const uniforms = {
     uStrength: { value: 0 },
@@ -334,11 +337,13 @@ function createGhost(root) {
   });
   for (const { o, t } of twins) o.add(t);
   return {
-    set(k, time) {
+    /** carrier: the skull carrier shows as a dark red ghost instead of amber. */
+    set(k, time, carrier = false) {
       const on = k > 0.001;
       for (const { t } of twins) t.visible = on;
       uniforms.uStrength.value = k;
       uniforms.uTime.value = time;
+      uniforms.uColor.value.copy(carrier ? BLOOD_GHOST : AMBER_GHOST);
     },
   };
 }

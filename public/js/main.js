@@ -18,6 +18,7 @@ import { setupMenu } from './menu.js';
 import { settings, actionsFor, onSettingsChange, keyName } from './settings.js';
 import { createChain } from './chain.js';
 import { createScan } from './scan.js';
+import { createSkull } from './skull.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -27,7 +28,7 @@ const BOT_RESPAWN = 1.5;
 
 let renderer, post, camera;
 let scene = null, world = null, effects = null;
-let vm = null, chain = null, scan = null;
+let vm = null, chain = null, scan = null, skull = null;
 let game = null;
 
 const menu = setupMenu({ onStart: startMatch });
@@ -89,6 +90,7 @@ function loadMap(map) {
     boxes: map.boxes,
     onSplat: (point, normal) => { effects.impact(point, normal); effects.impact(point, normal); },
   });
+  skull = map.relic ? createSkull(scene) : null;
   setAmbience(map.id === 'kiln' ? 'cave' : 'outdoor');
 }
 
@@ -115,7 +117,8 @@ function startMatch(opts) {
   initRenderer();
   const practice = !!opts.practice;
   // Online, the room decides the map; the welcome message switches to it.
-  const map = practice ? MAPS[opts.practiceMap] || MAPS.range : MAPS[settings.map] || MAPS.kiln;
+  const relicMode = (opts.mode || settings.mode) === 'relic';
+  const map = practice ? MAPS[opts.practiceMap] || MAPS.range : relicMode ? MAPS.volcano : MAPS[settings.map] || MAPS.kiln;
   loadMap(map);
   menu.hide();
   vm = createViewmodel(settings.character);
@@ -162,6 +165,7 @@ function endMatch(message = '') {
   const g = game;
   game = null;
   try { g.ws && g.ws.close(); } catch { /* already closed */ }
+  for (const timer of g.localTimers || []) clearInterval(timer);
   sfx.setSliding(false);
   setAmbience(null);
   $('bush-overlay').hidden = true;
@@ -197,15 +201,45 @@ addEventListener('beforeunload', (e) => {
 // ---------------------------------------------------------------- network
 
 function connect(opts) {
+  if (opts.local) { connectLocal(opts); return; }
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   game.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map, mode: opts.mode || settings.mode }));
   ws.onmessage = (ev) => { if (game && game.ws === ws) onMessage(JSON.parse(ev.data)); };
   ws.onclose = () => { if (game && game.ws === ws) endMatch(game.myId ? 'Connection lost.' : 'Could not reach the server.'); };
 }
 
 function send(m) {
+  if (game && game.localLink) { game.localLink.receive(m); return; }
   if (game && game.ws && game.ws.readyState === 1) game.ws.send(JSON.stringify(m));
+}
+
+// Offline: run the real server rules (server/room.js) inside the page, with
+// messages passed in memory instead of over a WebSocket. Used by the offline
+// test build for a solo Relic Run.
+async function connectLocal(opts) {
+  const g = game;
+  const { Room } = await import('/server/room.js');
+  if (game !== g) return;
+  const room = new Room('SOLO', { isPrivate: true, mode: opts.mode, map: settings.map, now: () => nowS() });
+  const deliver = (msg) => queueMicrotask(() => { if (game === g) onMessage(msg); });
+  const reply = (msg) => deliver(JSON.parse(JSON.stringify(msg)));
+  reply.raw = (text) => deliver(JSON.parse(text));
+  const me = room.addPlayer(reply, { name: settings.name, character: settings.character });
+  g.localRoom = room;   // reachable from ?debug test hooks via game.localRoom
+  g.localLink = {
+    receive(m) {
+      if (m.t === 'state') room.handleState(me, m);
+      else if (m.t === 'fire') room.handleFire(me, m);
+      else if (m.t === 'charge') room.handleCharge(me, m);
+      else if (m.t === 'scan') room.handleScan(me, m);
+      else if (m.t === 'ping') reply({ t: 'pong', c: m.c, time: room.now() });
+    },
+  };
+  g.localTimers = [
+    setInterval(() => room.tick(), 1000 / 60),
+    setInterval(() => reply.raw(JSON.stringify(room.snapshot())), 1000 / C.SNAPSHOT_RATE),
+  ];
 }
 
 // The server time of the remote poses currently on screen. Hits are checked
@@ -220,7 +254,10 @@ function onMessage(m) {
       game.myId = m.id;
       game.room = m.room;
       game.isPrivate = m.isPrivate;
+      game.rules = m.mode || 'dm';
+      game.team = m.team;
       $('goal').textContent = m.killsToWin;
+      $('relic-status').hidden = game.rules !== 'relic';
       history.replaceState(null, '', `?room=${m.room}`);
       $('room-info').innerHTML = `ROOM <b>${m.room}</b> · ${esc((MAPS[m.map] || game.map).name.toUpperCase())}`;
       if (MAPS[m.map] && m.map !== game.map.id) {
@@ -311,6 +348,7 @@ function onSnap(m) {
       game.remotes.delete(id);
     }
   }
+  game.relic = m.relic || null;
   game.over = m.over;
   game.winner = m.winner;
   for (const ev of m.ev) onEvent(ev);
@@ -405,6 +443,22 @@ function onEvent(ev) {
     case 'join':
       if (ev.id !== me) feed(`<b>${esc(ev.name)}</b> ENTERS THE KILN`);
       break;
+    case 'relic': {
+      const who = ev.id === me ? 'YOU' : `<b>${esc(ev.name || game.names[ev.id] || '???')}</b>`;
+      if (ev.what === 'take') {
+        feed(ev.id === me ? 'YOU HAVE THE SKULL · DRAG IT HOME' : `${who} TOOK THE SKULL`);
+        sfx.relicTake(ev.id === me);
+      } else if (ev.what === 'drop') {
+        feed('THE SKULL IS LOOSE');
+        sfx.relicDrop();
+      } else if (ev.what === 'score') {
+        feed(ev.id === me ? 'SKULL DELIVERED' : `${who} DELIVERED THE SKULL`);
+        sfx.relicScore(ev.id === me);
+      } else if (ev.what === 'home') {
+        feed('THE SKULL RETURNS TO THE CRATER');
+      }
+      break;
+    }
     case 'leave':
       feed(`<b>${esc(ev.name)}</b> FLED`);
       break;
@@ -845,6 +899,8 @@ function update(dt, t) {
     crouch: held('slide'),
     // Auto sprint flips the key: always run, hold Sprint to walk.
     sprint: settings.autoSprint ? !held('sprint') : held('sprint'),
+    // Dragging the skull costs a quarter of your speed
+    speedMult: game.relic && game.relic.by === game.myId ? C.RELIC_CARRY_MULT : 1,
     yaw: game.yaw,
     pitch: game.pitch,
   };
@@ -854,7 +910,8 @@ function update(dt, t) {
     while (game.accum >= PHYS_DT) {
       game.accum -= PHYS_DT;
       const vyBefore = L.vy;
-      const ev = stepPlayer(L, input, PHYS_DT, game.map.boxes);
+      const ev = stepPlayer(L, input, PHYS_DT, game.map.boxes, game.map.pads);
+      if (ev.launched) sfx.launch();
       if (ev.jumped) sfx.jump();
       if (ev.landed) {
         game.landDip = Math.min(0.22, Math.max(0, -vyBefore * 0.014));
@@ -901,7 +958,10 @@ function update(dt, t) {
   const scanTargets = game.mode === 'practice'
     ? game.bots.filter((b) => b.alive).map((b) => ({ key: b, model: b.model, p: b.p, v: [0, 0], h: bodyHeight(b.pose) }))
     : [...game.remotes.values()].filter((r) => r.pose && r.pose.a)
-      .map((r) => ({ key: r.id, model: r.model, p: r.pose.p, v: r.pose.v, h: bodyHeight(poseOf(r.pose.cr, r.pose.sl)) }));
+      .map((r) => ({
+        key: r.id, model: r.model, p: r.pose.p, v: r.pose.v, h: bodyHeight(poseOf(r.pose.cr, r.pose.sl)),
+        carrier: !!(game.relic && game.relic.by === r.id),   // the skull carrier shows up dark red
+      }));
   if (scan.update(nowS(), scanTargets) > 0) sfx.scanPing();
   post.uniforms.scan.value = scan.pulse(nowS()) * 0.8;
 
@@ -936,6 +996,16 @@ function update(dt, t) {
 
   vm.scene.visible = game.alive;
   vm.update(dt, game.hasSpear, { speed: hs, ground: L.onGround, slide: L.sliding }, Math.max(0, game.nextSling - nowS()));
+
+  if (skull) {
+    const r = game.relic || { st: 'home', p: game.map.relic.p, by: null };
+    let carrier = null;
+    if (r.st === 'carried') {
+      if (r.by === game.myId) carrier = [L.x, L.y, L.z];
+      else { const who = game.remotes.get(r.by); carrier = who && who.pose ? who.pose.p : null; }
+    }
+    skull.update(dt, t, { state: r.st, p: r.p, carrier, camera, boxes: game.map.boxes });
+  }
 
   world.update(t, camera);
   effects.update(dt);
@@ -1021,6 +1091,8 @@ function updateHud(hs, t) {
     sub = `New hunt in ${Math.ceil(game.over)}`;
   } else if (!game.myId) {
     msg = 'ENTERING THE KILN';
+  } else if (!foe && game.localLink) {
+    // offline solo run: nobody is coming
   } else if (!foe) {
     msg = 'WAITING FOR PREY';
     const link = `${location.origin}${location.pathname}?room=${game.room}`;
@@ -1035,24 +1107,43 @@ function updateHud(hs, t) {
   setHtml('center-sub', sub);
 
   // Marker over your thrown spear, pinned to a ring when it's off-screen
-  const marker = $('spear-marker');
-  if (game.mySpear && game.alive) {
-    const L = game.local;
-    const sp = game.mySpear.p;
-    tmpV.set(sp[0], sp[1] + 0.8, sp[2]).project(camera);
-    let x = tmpV.x, y = tmpV.y;
-    const behind = tmpV.z > 1;
-    if (behind) { x = -x; y = -y - 0.001; }
-    if (behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85) {
-      const l = Math.hypot(x, y) || 1;
-      x = (x / l) * 0.7;
-      y = (y / l) * 0.6;
-    }
-    marker.hidden = false;
-    marker.style.left = `${((x + 1) / 2) * innerWidth}px`;
-    marker.style.top = `${((1 - y) / 2) * innerHeight}px`;
-    setText('spear-dist', `${Math.round(Math.hypot(sp[0] - L.x, sp[2] - L.z))}m`);
-  } else {
-    marker.hidden = true;
+  placeMarker($('spear-marker'), 'spear-dist', game.mySpear && game.alive ? game.mySpear.p : null, 0.8);
+
+  // Relic Run: where the skull is, and (while you drag it) where home is
+  const relicOn = game.rules === 'relic' && game.relic;
+  const mine = relicOn && game.relic.by === me;
+  if (relicOn) {
+    const r = game.relic;
+    const holder = r.by != null ? (r.by === me ? 'YOU' : esc(game.names[r.by] || '???')) : '';
+    setHtml('relic-status', {
+      home: 'THE SKULL WAITS IN THE CRATER',
+      carried: mine ? 'YOU HAVE THE SKULL · <b>DRAG IT TO YOUR CAVE</b> · −25% SPEED' : `<b>${holder}</b> HAS THE SKULL`,
+      dropped: 'THE SKULL IS LOOSE',
+      scored: 'SKULL DELIVERED',
+    }[r.st] || '');
   }
+  const skullPos = relicOn && !mine && game.relic.st !== 'scored' && skull ? skull.position.toArray() : null;
+  placeMarker($('relic-marker'), 'relic-dist', game.alive ? skullPos : null, 2.2);
+  const home = mine && game.map.bases ? game.map.bases[game.team].p : null;
+  placeMarker($('home-marker'), 'home-dist', game.alive ? home : null, 3);
+}
+
+// A HUD marker over a world point, pinned to a ring round the crosshair when
+// the point is off-screen, with the distance under it.
+function placeMarker(el, distId, p, lift) {
+  if (!p) { el.hidden = true; return; }
+  const L = game.local;
+  tmpV.set(p[0], p[1] + lift, p[2]).project(camera);
+  let x = tmpV.x, y = tmpV.y;
+  const behind = tmpV.z > 1;
+  if (behind) { x = -x; y = -y - 0.001; }
+  if (behind || Math.abs(x) > 0.9 || Math.abs(y) > 0.85) {
+    const l = Math.hypot(x, y) || 1;
+    x = (x / l) * 0.7;
+    y = (y / l) * 0.6;
+  }
+  el.hidden = false;
+  el.style.left = `${((x + 1) / 2) * innerWidth}px`;
+  el.style.top = `${((1 - y) / 2) * innerHeight}px`;
+  setText(distId, `${Math.round(Math.hypot(p[0] - L.x, p[2] - L.z))}m`);
 }

@@ -166,7 +166,7 @@ export function createScan(scene, { boxes = [], onSplat } = {}) {
         if (left <= 0 || !t) { r.mist.dispose(); r.model.setGhost(0, now); revealed.delete(key); continue; }
         const k = Math.min(1, left / 0.8);
         r.mist.update(dt, t, k);
-        r.model.setGhost(k, now);
+        r.model.setGhost(k, now, t.carrier);
       }
       updateEyes(now);
       return fresh;
@@ -205,6 +205,9 @@ function puffTexture() {
 
 const AMBER = new THREE.Color(0xff6a00);
 const HOT = new THREE.Color(0xffa820);
+// The skull carrier burns dark red instead
+const BLOOD = new THREE.Color(0x6a0000);
+const BLOOD_HOT = new THREE.Color(0xc01208);
 const SHROUD_N = 70;   // hangs around the body and moves with it
 const TRAIL_N = 50;    // flung back against the direction of travel
 const MIST_N = SHROUD_N + TRAIL_N;
@@ -287,7 +290,7 @@ function createMist(scene, tex) {
         // Bright at birth, burning down to dark amber; flicker keeps it restless
         const k = 1 - p.age / p.life;
         const fadeIn = Math.min(1, p.age / 0.12);
-        c.copy(AMBER).lerp(HOT, k * k).multiplyScalar(Math.sqrt(k) * fadeIn * strength * (0.5 + Math.random() * 0.5) * bright);
+        c.copy(t.carrier ? BLOOD : AMBER).lerp(t.carrier ? BLOOD_HOT : HOT, k * k).multiplyScalar(Math.sqrt(k) * fadeIn * strength * (0.5 + Math.random() * 0.5) * bright);
         col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       }
       first = false;

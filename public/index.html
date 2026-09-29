@@ -26,6 +26,7 @@
       <div class="goal">FIRST TO <span id="goal">10</span></div>
       <div class="side foe"><b id="score-foe">0</b><span id="name-foe">—</span></div>
     </div>
+    <div id="relic-status" hidden></div>
     <div id="practice-hud" hidden>
       <div class="pr-cell"><span>HITS</span><b id="pr-hits">0/0</b><small id="pr-acc">—</small></div>
       <div class="pr-cell"><span>COURSE</span><b id="pr-timer">—</b><small id="pr-best">BEST —</small></div>
@@ -37,6 +38,8 @@
       <div id="center-sub"></div>
     </div>
     <div id="spear-marker" hidden><span>▼</span><small id="spear-dist"></small></div>
+    <div id="relic-marker" class="marker relic" hidden><span>☠</span><small id="relic-dist"></small></div>
+    <div id="home-marker" class="marker home" hidden><span>▲ HOME</span><small id="home-dist"></small></div>
     <div id="bottom-left">
       <div id="room-info"></div>
       <div id="ping"></div>
@@ -84,6 +87,12 @@
           <label class="field">
             <span>Name</span>
             <input id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Caveman">
+          </label>
+          <label class="field row arena"><span>Mode</span>
+            <select id="mode">
+              <option value="dm">Deathmatch · first to 10 kills</option>
+              <option value="relic">Relic Run · drag the skull home</option>
+            </select>
           </label>
           <label class="field row arena"><span>Arena</span>
             <select id="arena">

@@ -108,7 +108,7 @@ function startSlide(s, wx, wz, hasWish) {
   else if (hasWish) { dx = wx; dz = wz; }
   else return;
   if (s.slideCooldown <= 0) {
-    speed = Math.max(speed, C.SLIDE_SPEED);
+    speed = Math.max(speed, C.SLIDE_SPEED * (s.speedMult || 1));
     s.slideCooldown = C.SLIDE_REBOOST_COOLDOWN;
   }
   if (speed < C.SLIDE_MIN_SPEED) return;
@@ -122,22 +122,29 @@ function startSlide(s, wx, wz, hasWish) {
  * input: { fwd: -1..1, strafe: -1..1, jump, crouch, sprint (bools, held), yaw, pitch }
  * Returns event flags for sounds and effects: { jumped, landed, slid }.
  */
-export function stepPlayer(s, input, dt, boxes = MAP.boxes) {
+/**
+ * pads: launch pads, [{ min, max, v: [vx, vy, vz] }]. Standing on one flings
+ * you along v. input.speedMult (default 1) scales every top speed, e.g. 0.75
+ * while dragging the relic.
+ */
+export function stepPlayer(s, input, dt, boxes = MAP.boxes, pads = null) {
+  s.speedMult = input.speedMult || 1;
   // Sub-step so nothing moves further than ~0.2 m per step, which keeps thin
   // boxes from being tunnelled through at top speed.
   const steps = Math.max(1, Math.ceil((Math.hypot(s.vx, s.vy, s.vz) * dt) / 0.2));
   const events = { jumped: false, landed: false, slid: false };
   for (let i = 0; i < steps; i++) {
-    const e = substep(s, input, dt / steps, boxes);
+    const e = substep(s, input, dt / steps, boxes, pads);
     events.jumped ||= e.jumped;
     events.landed ||= e.landed;
     events.slid ||= e.slid;
+    events.launched ||= e.launched;
   }
   s.crouchHeldPrev = !!input.crouch;
   return events;
 }
 
-function substep(s, input, dt, boxes) {
+function substep(s, input, dt, boxes, pads) {
   const events = { jumped: false, landed: false, slid: false };
   s.yaw = input.yaw;
   s.pitch = input.pitch;
@@ -185,7 +192,7 @@ function substep(s, input, dt, boxes) {
     } else {
       if (!wantJump) applyFriction(s, C.FRICTION, dt);
       if (hasWish) {
-        const top = s.crouching ? C.CROUCH_SPEED : input.sprint ? C.RUN_SPEED : C.WALK_SPEED;
+        const top = (s.crouching ? C.CROUCH_SPEED : input.sprint ? C.RUN_SPEED : C.WALK_SPEED) * s.speedMult;
         accelerate(s, wx, wz, top, C.GROUND_ACCEL / C.RUN_SPEED, dt);
       }
     }
@@ -210,7 +217,8 @@ function substep(s, input, dt, boxes) {
 
   // Hard horizontal cap
   const hs = Math.hypot(s.vx, s.vz);
-  if (hs > C.MAX_SPEED) { s.vx *= C.MAX_SPEED / hs; s.vz *= C.MAX_SPEED / hs; }
+  const cap = C.MAX_SPEED * s.speedMult;
+  if (hs > cap) { s.vx *= cap / hs; s.vz *= cap / hs; }
 
   s.vy -= C.GRAVITY * dt;
 
@@ -227,6 +235,19 @@ function substep(s, input, dt, boxes) {
   if (!s.onGround) s.sliding = false;
 
   // Anything that falls out of the world gets put back at a spawn.
+  // Launch pads fire when you're standing on one
+  if (pads && s.onGround) {
+    for (const p of pads) {
+      if (s.x >= p.min[0] && s.x <= p.max[0] && s.z >= p.min[2] && s.z <= p.max[2] && Math.abs(s.y - p.max[1]) < 0.3) {
+        s.vx = p.v[0]; s.vy = p.v[1]; s.vz = p.v[2];
+        s.onGround = false;
+        s.sliding = false;
+        events.launched = true;
+        break;
+      }
+    }
+  }
+
   if (s.y < -20) {
     const sp = MAP.spawns[0];
     s.x = sp.p[0]; s.y = sp.p[1]; s.z = sp.p[2];

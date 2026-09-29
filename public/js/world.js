@@ -24,11 +24,13 @@ function vnoise(x, y, z) {
   return r - 0.5;
 }
 
-function lumpy(geometry, amp, freq) {
+// keepTopY: leave the walkable top face flat (for terraces you stand on)
+function lumpy(geometry, amp, freq, keepTopY) {
   const pos = geometry.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
+    if (keepTopY !== undefined && v.y > keepTopY - 1e-3) continue;
     const f = freq;
     v.x += vnoise(v.x * f, v.y * f, v.z * f + 17) * amp;
     v.y += vnoise(v.x * f + 31, v.y * f, v.z * f) * amp * 0.6;
@@ -48,6 +50,9 @@ export function buildWorld(scene, map) {
     course: new THREE.MeshLambertMaterial({ map: tex.concrete, color: 0xc8bcb4 }),
     blood: new THREE.MeshLambertMaterial({ map: tex.rock, color: 0x6a0a06, emissive: 0x4a0402 }),
     grass: new THREE.MeshLambertMaterial({ map: tex.grass, color: 0xb0a098 }),
+    ash: new THREE.MeshLambertMaterial({ map: tex.floor, color: 0x6a5a58 }),
+    basalt: new THREE.MeshLambertMaterial({ map: tex.rock, color: 0x5a4a4a, flatShading: true }),
+    step: new THREE.MeshLambertMaterial({ map: tex.slab, color: 0x5a4e4c }),
     wood: new THREE.MeshLambertMaterial({ map: tex.bark, color: 0xa08a80 }),
   };
 
@@ -72,14 +77,15 @@ export function buildWorld(scene, map) {
   for (const b of map.boxes) {
     if (b.mat === 'trunk') continue;   // drawn as round trees in addThicketDecor
     const sx = b.max[0] - b.min[0], sy = b.max[1] - b.min[1], sz = b.max[2] - b.min[2];
-    const isRock = b.mat === 'rock';
+    const isRock = b.mat === 'rock' || b.mat === 'basalt';
     const seg = (n) => (isRock ? Math.max(1, Math.round(n / 1.2)) : 1);
     const geo = new THREE.BoxGeometry(sx, sy, sz, seg(sx), seg(sy), seg(sz));
     worldUV(geo, sx, sy, sz, b.mat === 'floor' ? 3 : 2.5);
     geo.translate((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     // Lump the rock up in world space. Faces bulge outward by at most ~0.25 m,
     // which you can't feel against the flat collision box.
-    if (isRock) lumpy(geo, 0.55, 0.45);
+    if (b.mat === 'rock') lumpy(geo, 0.55, 0.45);
+    if (b.mat === 'basalt') lumpy(geo, 0.6, 0.4, b.max[1]);
     const mesh = new THREE.Mesh(geo, mats[b.mat] || mats.concrete);
     scene.add(mesh);
   }
@@ -90,6 +96,7 @@ export function buildWorld(scene, map) {
   let extras = {};
   if (map.id === 'kiln') addKilnDecor(scene, map, glowMat, glowDim);
   else if (map.id === 'thicket') extras = addThicketDecor(scene, map);
+  else if (map.id === 'volcano') extras = addVolcanoDecor(scene, map);
   else addQuarryDecor(scene, map, glowMat, glowDim);
 
   // Lights
@@ -453,6 +460,97 @@ function addThicketDecor(scene, map) {
       }
       pos.needsUpdate = true;
       flyMat.opacity = 0.55 + 0.35 * Math.sin(t * 2.3);
+    },
+  };
+}
+
+// ---------------------------------------------------------------- the Caldera
+
+function addVolcanoDecor(scene, map) {
+  const lava = new THREE.MeshBasicMaterial({ color: 0xff4a0a });
+  const lavaDim = new THREE.MeshBasicMaterial({ color: 0xb01e04 });
+  const flat = (w, d, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y, z);
+    scene.add(m);
+    return m;
+  };
+  const pulsing = [];
+
+  // Lava pools in the crater's corners, around the skull
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    pulsing.push(flat(5, 5, sx * 7.5, 8.03, sz * 7.5, lava));
+  }
+  // Lava falls down the terrace faces, and channels across the plains
+  for (const [x, z, w, d] of [[0, 45.05, 3, 0], [0, -45.05, 3, 0], [45.05, 22, 0, 3], [-45.05, -22, 0, 3]]) {
+    const fall = new THREE.Mesh(new THREE.PlaneGeometry(w || d, 4), lavaDim);
+    fall.position.set(x, 2, z);
+    fall.rotation.y = w ? (z > 0 ? 0 : Math.PI) : (x > 0 ? Math.PI / 2 : -Math.PI / 2);
+    scene.add(fall);
+  }
+  for (const [x, z, w, d] of [[-70, 0, 26, 1.4], [70, 0, 26, 1.4], [0, -70, 1.4, 30], [0, 70, 1.4, 30], [-60, 60, 18, 1.2], [60, -60, 18, 1.2]]) {
+    flat(w, d, x, 0.03, z, lavaDim);
+  }
+
+  // Launch pads: a glowing rune plate that pulses
+  for (const pad of map.pads) {
+    const cx = (pad.min[0] + pad.max[0]) / 2, cz = (pad.min[2] + pad.max[2]) / 2;
+    const size = pad.max[0] - pad.min[0];
+    flat(size, size, cx, pad.max[1] + 0.03, cz, new THREE.MeshBasicMaterial({ color: 0x3a0c04 }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(size * 0.28, size * 0.42, 6), new THREE.MeshBasicMaterial({ color: 0xff8a20 }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(cx, pad.max[1] + 0.05, cz);
+    scene.add(ring);
+    pulsing.push(ring);
+  }
+
+  // A sigil over each cave mouth: amber for the west (team 0), crimson for the east
+  const bases = [];
+  for (const b of map.bases) {
+    const color = b.team === 0 ? 0xffa000 : 0xd0101a;
+    const sigil = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.18, 6, 3), new THREE.MeshBasicMaterial({ color }));
+    const mouthX = b.p[0] > 0 ? 90.2 : -90.2;
+    sigil.position.set(mouthX, 7.6, 0);
+    sigil.rotation.y = Math.PI / 2;
+    scene.add(sigil);
+    const glow = new THREE.PointLight(color, 25, 18, 1.6);
+    glow.position.set(b.p[0], 3, 0);
+    scene.add(glow);
+    bases.push(sigil);
+  }
+
+  // Smoke rising out of the crater
+  const n = 120, smoke = new Float32Array(n * 3), life = new Float32Array(n);
+  for (let i = 0; i < n; i++) life[i] = Math.random();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(smoke, 3));
+  const puff = document.createElement('canvas');
+  puff.width = puff.height = 32;
+  const pg = puff.getContext('2d');
+  const grad = pg.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  pg.fillStyle = grad;
+  pg.fillRect(0, 0, 32, 32);
+  const smokeMat = new THREE.PointsMaterial({ color: 0x3a2a26, size: 2.4, map: new THREE.CanvasTexture(puff), transparent: true, opacity: 0.32, depthWrite: false });
+  const plume = new THREE.Points(g, smokeMat);
+  plume.frustumCulled = false;
+  scene.add(plume);
+
+  return {
+    update(t) {
+      for (const [i, m] of pulsing.entries()) m.material.color.setRGB(1, 0.25 + 0.2 * Math.sin(t * 2 + i), 0.04);
+      for (const s of bases) s.rotation.x = t * 0.6;
+      for (let i = 0; i < n; i++) {
+        life[i] += 0.004;
+        if (life[i] > 1) life[i] -= 1;
+        const k = life[i];
+        smoke[i * 3] = Math.sin(i * 7.3) * (2 + k * 14) + k * 6;
+        smoke[i * 3 + 1] = 9 + k * 45;
+        smoke[i * 3 + 2] = Math.cos(i * 3.1) * (2 + k * 14);
+      }
+      g.attributes.position.needsUpdate = true;
     },
   };
 }

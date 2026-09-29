@@ -194,6 +194,18 @@ export const sfx = {
   scanDistant(dist, pan = 0) {
     noiseHit({ freq: 1400, sweepTo: 3200, q: 4, peak: 0.12 * falloff(dist), decay: 0.5, attack: 0.08, pan, bus: 'weapons' });
   },
+  launch() { noiseHit({ freq: 300, sweepTo: 1800, q: 1.2, peak: 0.3, decay: 0.45, bus: 'movement' }); tone(70, 0.3, 'sine', 0.3, 2.2, 0, 'movement'); },
+  // The skull: a bone rattle and a low groan when taken
+  relicTake(mine) {
+    for (let i = 0; i < 6; i++) setTimeout(() => noiseHit({ freq: 1800 + Math.random() * 1400, q: 6, peak: 0.12, decay: 0.03, bus: 'ui' }), i * 45);
+    tone(mine ? 82 : 62, 0.9, 'sawtooth', 0.12, 0.7, 0, 'ui');
+  },
+  relicDrop() { tone(140, 0.25, 'triangle', 0.2, 0.5, 0, 'ui'); noiseHit({ freq: 500, peak: 0.2, decay: 0.15, bus: 'ui' }); },
+  relicScore(mine) {
+    const notes = mine ? [196, 247, 294, 392] : [196, 185, 165, 131];
+    notes.forEach((f, i) => setTimeout(() => tone(f, 0.6, 'sawtooth', 0.14, 1, 0, 'ui'), i * 120));
+    sfx.scratch();
+  },
   rustle(dist, pan = 0) {
     noiseHit({ freq: 2200, q: 0.7, peak: 0.1 * falloff(dist), decay: 0.22, attack: 0.02, pan, bus: 'movement' });
   },

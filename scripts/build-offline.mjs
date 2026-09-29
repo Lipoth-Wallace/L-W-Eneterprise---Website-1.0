@@ -11,11 +11,12 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(process.argv[2] || path.join(root, 'dist/bloodflint-offline.html'));
 
-// The client imports shared code as '/shared/...' (served by the game server).
+// The client imports shared code as '/shared/...' (served by the game server),
+// and offline it runs server/room.js in the page for a solo Relic Run.
 const sharedPaths = {
   name: 'shared-paths',
   setup(b) {
-    b.onResolve({ filter: /^\/shared\// }, (args) => ({ path: path.join(root, args.path) }));
+    b.onResolve({ filter: /^\/(shared|server)\// }, (args) => ({ path: path.join(root, args.path) }));
   },
 };
 

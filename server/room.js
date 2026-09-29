@@ -1,8 +1,15 @@
-// One 1v1 deathmatch. Movement comes from the clients (within sanity limits);
-// hits, kills, the spear and the score are decided here.
+// One 1v1 match. Movement comes from the clients (within sanity limits);
+// hits, kills, the spear, the relic and the score are decided here.
+//
+// Modes:
+//   'dm'    Deathmatch: first to KILLS_TO_WIN kills.
+//   'relic' Relic Run (on the Caldera): a skull sits in the crater. Touch it to
+//           take it on a lead, drag it (25% slower) into your own cave to
+//           score. Die and you drop it; anyone can pick it up. First to
+//           RELIC_TO_WIN captures.
 
 import * as C from '../shared/constants.js';
-import { MAPS } from '../shared/map.js';
+import { MAPS, ARENAS } from '../shared/map.js';
 import { rayMap, rayPlayer, poseOf, hitboxBonus, normalize, spearRestPoint } from '../shared/raycast.js';
 
 const HISTORY_SECONDS = 1;
@@ -11,9 +18,12 @@ const MAX_REPORTED_SPEED = C.MAX_SPEED * 1.35 + 4;   // generous: jitter bunches
 let nextPlayerId = 1;
 
 export class Room {
-  constructor(code, { isPrivate = false, map = 'kiln', now = () => performance.now() / 1000 } = {}) {
+  constructor(code, { isPrivate = false, map = 'kiln', mode = 'dm', now = () => performance.now() / 1000 } = {}) {
     this.code = code;
-    this.map = MAPS[map] && map !== 'range' ? MAPS[map] : MAPS.kiln;
+    this.mode = mode === 'relic' ? 'relic' : 'dm';
+    if (this.mode === 'relic') this.map = MAPS.volcano;
+    else this.map = MAPS[map] && ARENAS.includes(map) ? MAPS[map] : MAPS.kiln;
+    this.relic = this.mode === 'relic' ? { state: 'home', p: [...this.map.relic.p], by: null, since: 0 } : null;
     this.isPrivate = isPrivate;
     this.now = now;
     this.players = new Map();       // id -> player
@@ -27,8 +37,11 @@ export class Room {
 
   addPlayer(send, { name = 'Caveman', character = 'brute' } = {}) {
     const id = nextPlayerId++;
+    const taken = new Set([...this.players.values()].map((o) => o.team));
     const p = {
       id,
+      team: taken.has(0) ? 1 : 0,
+      kills: 0,
       send,
       name: String(name).replace(/[^\w \-]/g, '').slice(0, 16) || 'Caveman',
       character: C.CHARACTERS.includes(character) ? character : 'brute',
@@ -48,7 +61,10 @@ export class Room {
       spawnSeq: 0,
     };
     this.players.set(id, p);
-    send({ t: 'welcome', id, room: this.code, isPrivate: this.isPrivate, killsToWin: C.KILLS_TO_WIN, map: this.map.id });
+    send({
+      t: 'welcome', id, room: this.code, isPrivate: this.isPrivate, map: this.map.id, mode: this.mode, team: p.team,
+      killsToWin: this.mode === 'relic' ? C.RELIC_TO_WIN : C.KILLS_TO_WIN,
+    });
     this.spawn(p);
     this.pushEvent({ e: 'join', id, name: p.name });
     return p;
@@ -57,12 +73,14 @@ export class Room {
   removePlayer(id) {
     const p = this.players.get(id);
     if (!p) return;
+    if (this.relic && this.relic.by === id) this.dropRelic(p);
     this.players.delete(id);
     this.pushEvent({ e: 'leave', id, name: p.name });
     // The match can't carry on 1v0, so the remaining player starts fresh.
-    for (const o of this.players.values()) o.score = 0;
+    for (const o of this.players.values()) { o.score = 0; o.kills = 0; }
     this.matchOverAt = 0;
     this.winner = null;
+    if (this.relic) this.resetRelic(false);
   }
 
   opponentOf(p) {
@@ -74,8 +92,10 @@ export class Room {
 
   spawn(p) {
     const foe = this.opponentOf(p);
-    let best = this.map.spawns[0], bestD = -1;
-    for (const sp of this.map.spawns) {
+    // Relic Run: spawn on your own side. Deathmatch: as far from the foe as possible.
+    const pool = this.mode === 'relic' ? this.map.spawns.filter((sp) => sp.team === p.team) : this.map.spawns;
+    let best = pool[0], bestD = -1;
+    for (const sp of pool) {
       const d = foe && foe.alive ? Math.hypot(sp.p[0] - foe.x, sp.p[2] - foe.z) : Math.random() * 100;
       if (d > bestD) { bestD = d; best = sp; }
     }
@@ -224,9 +244,12 @@ export class Room {
     victim.alive = false;
     victim.respawnAt = t + C.RESPAWN_TIME;
     victim.spear = { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 };
+    if (this.relic && this.relic.by === victim.id) this.dropRelic(victim);
     if (this.matchOverAt) return;
-    killer.score++;
+    killer.kills++;
     this.pushEvent({ e: 'kill', killer: killer.id, victim: victim.id, w: weapon, at: [victim.x, victim.y, victim.z] });
+    if (this.mode === 'relic') return;   // kills don't score in Relic Run
+    killer.score++;
     if (killer.score >= C.KILLS_TO_WIN) {
       this.winner = killer.id;
       this.matchOverAt = t + C.MATCH_RESET_TIME;
@@ -234,8 +257,67 @@ export class Room {
     }
   }
 
+  // ---- relic ----
+
+  dropRelic(p) {
+    const r = this.relic;
+    r.state = 'dropped';
+    r.by = null;
+    r.p = [p.x, p.y, p.z];
+    r.since = this.now();
+    this.pushEvent({ e: 'relic', what: 'drop', id: p.id, p: r.p });
+  }
+
+  resetRelic(announce = true) {
+    const r = this.relic;
+    r.state = 'home';
+    r.by = null;
+    r.p = [...this.map.relic.p];
+    r.since = this.now();
+    if (announce) this.pushEvent({ e: 'relic', what: 'home' });
+  }
+
+  tickRelic(t) {
+    const r = this.relic;
+    if (r.state === 'scored') {
+      if (t - r.since >= C.RELIC_RESET_DELAY) this.resetRelic();
+      return;
+    }
+    if (r.state === 'carried') {
+      const p = this.players.get(r.by);
+      if (!p) return this.resetRelic();
+      r.p = [p.x, p.y, p.z];
+      const z = this.map.bases[p.team].zone;
+      if (p.x > z.min[0] && p.x < z.max[0] && p.z > z.min[2] && p.z < z.max[2] && p.y < z.max[1]) {
+        p.score++;
+        r.state = 'scored';
+        r.by = null;
+        r.since = t;
+        this.pushEvent({ e: 'relic', what: 'score', id: p.id, name: p.name });
+        if (p.score >= C.RELIC_TO_WIN && !this.matchOverAt) {
+          this.winner = p.id;
+          this.matchOverAt = t + C.MATCH_RESET_TIME;
+          this.pushEvent({ e: 'win', id: p.id, name: p.name });
+        }
+      }
+      return;
+    }
+    if (r.state === 'dropped' && t - r.since > C.RELIC_RETURN) return this.resetRelic();
+    // Home or dropped: the first living player to touch it takes it
+    for (const p of this.players.values()) {
+      if (!p.alive || this.matchOverAt) continue;
+      if (Math.hypot(p.x - r.p[0], p.z - r.p[2]) < C.RELIC_GRAB_RADIUS && Math.abs(p.y - r.p[1]) < 2.5) {
+        r.state = 'carried';
+        r.by = p.id;
+        this.pushEvent({ e: 'relic', what: 'take', id: p.id, name: p.name });
+        break;
+      }
+    }
+  }
+
   tick() {
     const t = this.now();
+    if (this.relic) this.tickRelic(t);
     for (const p of this.players.values()) {
       if (!p.alive && t >= p.respawnAt && !this.matchOverAt) this.spawn(p);
       // Spear pickup and auto-return
@@ -252,7 +334,8 @@ export class Room {
     if (this.matchOverAt && t >= this.matchOverAt) {
       this.matchOverAt = 0;
       this.winner = null;
-      for (const p of this.players.values()) p.score = 0;
+      for (const p of this.players.values()) { p.score = 0; p.kills = 0; }
+      if (this.relic) this.resetRelic(false);
       for (const p of this.players.values()) this.spawn(p);
       this.pushEvent({ e: 'reset' });
     }
@@ -274,9 +357,11 @@ export class Room {
         rl: round(Math.max(0, p.nextSling - t)),
         pr: t < p.protectedUntil ? 1 : 0,
         ch: p.charging ? 1 : 0,
+        tm: p.team, k: p.kills,
       });
     }
     const snap = { t: 'snap', time: t, players, ev: this.events, over: this.matchOverAt ? round(this.matchOverAt - t) : 0, winner: this.winner };
+    if (this.relic) snap.relic = { st: this.relic.state, p: this.relic.p.map((v) => round(v)), by: this.relic.by };
     this.events = [];
     return snap;
   }

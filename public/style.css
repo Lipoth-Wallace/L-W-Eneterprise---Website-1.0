@@ -225,3 +225,11 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
 .arena select { flex: 1; }
 
 .offline-note { margin: 0; color: var(--bone); font-size: 18px; border-left: 3px solid var(--blood); padding-left: 10px; }
+
+/* ---------- Relic Run ---------- */
+#relic-status { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--bone); background: var(--panel); border: 2px solid var(--line); padding: 3px 10px; white-space: nowrap; }
+#relic-status b { color: var(--ember); font-weight: normal; }
+.marker { position: absolute; transform: translate(-50%, -100%); text-align: center; line-height: 1; font-size: 16px; }
+.marker small { display: block; font-size: 10px; color: var(--bone); }
+.marker.relic { color: #e8dcc0; font-size: 22px; }
+.marker.home { color: #ffa000; font-size: 12px; }

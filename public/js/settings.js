@@ -45,6 +45,7 @@ const DEFAULTS = {
   chain: true,             // gold chain in first person
   musicTrack: 'shuffle',   // a TRACKS index or 'shuffle'
   map: 'random',           // arena for rooms you create: an ARENAS id or 'random'
+  mode: 'dm',              // 'dm' (deathmatch) or 'relic' (Relic Run)
   binds: Object.fromEntries(ACTIONS.map((a) => [a.id, [...a.def]])),
   volumes: { master: 0.7, weapons: 1, hits: 1, movement: 0.8, ambience: 0.45, ui: 0.8, music: 0.6 },
 };
