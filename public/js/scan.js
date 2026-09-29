@@ -1,8 +1,12 @@
 // The scan: press it and a pair of 2D eyes shoots out from the crosshair,
 // growing exponentially. A wavefront expands at the same exponential rate
-// through a cone in front of you, and any fighter it reaches is highlighted
-// through walls (a rough golden silhouette, after Hunt: Showdown's Dark
-// Sight) for SCAN_REVEAL seconds.
+// through a cone in front of you, and any fighter it reaches is wreathed in a
+// churning amber mist, visible through walls, for SCAN_REVEAL seconds (after
+// Hunt: Showdown's Dark Sight).
+//
+// The mist is deliberately vague: a rough body-sized cloud, not an outline you
+// can aim at a head with. It streams out behind a moving fighter, so the
+// trail tells you which way they're heading.
 //
 // Opponents see your eyes fly out from where you stand, so scanning gives
 // away your position.
@@ -13,8 +17,8 @@ import { waveRadius, inCone, WAVE_K as K } from '/shared/scan.js';
 
 // Almond eyes with slit pupils, used by the HUD overlay and the world sprite
 export const EYES_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
-  <defs><radialGradient id="i" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffe7a0"/><stop offset="0.55" stop-color="#ffb03a"/><stop offset="1" stop-color="#c8400c"/></radialGradient></defs>
-  <g fill="url(#i)" stroke="#ffcf6a" stroke-width="1.5">
+  <defs><radialGradient id="i" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffe08a"/><stop offset="0.55" stop-color="#ffb000"/><stop offset="1" stop-color="#b85a00"/></radialGradient></defs>
+  <g fill="url(#i)" stroke="#ffc233" stroke-width="1.5">
     <path d="M6 20 Q26 2 50 20 Q26 38 6 20 Z"/>
     <path d="M70 20 Q94 2 114 20 Q94 38 70 20 Z"/>
   </g>
@@ -23,7 +27,7 @@ export const EYES_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12
 
 export function createScan(scene, overlay) {
   let wave = null;                 // our current scan: { eye, dir, start, found:Set }
-  const revealed = new Map();      // target key -> { until, model }
+  const revealed = new Map();      // target key -> { until, mist }
   const sprites = [];              // other players' eyes flying through the world
 
   // One shared texture for world sprites, drawn from the SVG
@@ -34,6 +38,7 @@ export function createScan(scene, overlay) {
   const img = new Image();
   img.onload = () => { tex.image = img; tex.needsUpdate = true; };
   img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(EYES_SVG);
+  const puff = puffTexture();
 
   return {
     /** Start our own scan. Returns nothing; reveals happen in update(). */
@@ -68,18 +73,20 @@ export function createScan(scene, overlay) {
           const c = inCone(wave.eye, wave.dir, chest);
           if (c.inside && c.dist <= r) {
             wave.found.add(t.key);
-            revealed.set(t.key, { until: now + C.SCAN_REVEAL, model: t.model });
+            revealed.set(t.key, { until: now + C.SCAN_REVEAL, mist: createMist(scene, puff) });
             fresh++;
           }
         }
         if (age > C.SCAN_WAVE_TIME) wave = null;
       }
-      // Fade highlights: quick in, long tail, gone when the target is.
-      const live = new Set(targets.map((t) => t.key));
+      // Mists fade over their last 0.8 s, and vanish with the target.
+      const byKey = new Map(targets.map((t) => [t.key, t]));
+      const dt = Math.min(0.05, Math.max(0, now - (this.last || now)));
+      this.last = now;
       for (const [key, r] of revealed) {
-        const left = r.until - now;
-        if (left <= 0 || !live.has(key)) { r.model.setHighlight(0); revealed.delete(key); continue; }
-        r.model.setHighlight(Math.min(1, left / 0.8));
+        const left = r.until - now, t = byKey.get(key);
+        if (left <= 0 || !t) { r.mist.dispose(); revealed.delete(key); continue; }
+        r.mist.update(dt, t, Math.min(1, left / 0.8));
       }
       for (let i = sprites.length - 1; i >= 0; i--) {
         const sp = sprites[i];
@@ -102,9 +109,96 @@ export function createScan(scene, overlay) {
       return wave ? Math.max(0, 1 - (now - wave.start) / C.SCAN_WAVE_TIME) : 0;
     },
     clear() {
-      for (const r of revealed.values()) r.model.setHighlight(0);
+      for (const r of revealed.values()) r.mist.dispose();
       revealed.clear();
       wave = null;
+    },
+  };
+}
+
+// A soft round blob for mist particles, drawn once
+function puffTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  return tex;
+}
+
+const AMBER = new THREE.Color(0xff6a00);
+const HOT = new THREE.Color(0xffa820);
+const MIST_N = 90;
+
+// The mist around one sensed fighter. Particles are born inside the body's
+// rough volume and live half a second, boiling outward and upward. While the
+// fighter moves, they're flung back against the motion, so the cloud smears
+// into a trail behind them. Additive and depth-test-free, so it shows through
+// walls and foliage.
+function createMist(scene, tex) {
+  const pos = new Float32Array(MIST_N * 3);
+  const col = new Float32Array(MIST_N * 3);
+  const parts = [];
+  for (let i = 0; i < MIST_N; i++) parts.push({ x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0, age: 1, life: 1, seeded: false });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({
+    map: tex, size: 0.95, sizeAttenuation: true, vertexColors: true, transparent: true,
+    depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  points.renderOrder = 10;
+  scene.add(points);
+  let first = true;
+  const c = new THREE.Color();
+
+  function spawn(p, t, stagger) {
+    const h = t.h || 1.8;
+    p.x = t.p[0] + (Math.random() - 0.5) * 0.8;
+    p.y = t.p[1] + 0.1 + Math.random() * h;
+    p.z = t.p[2] + (Math.random() - 0.5) * 0.8;
+    const vx = t.v ? t.v[0] : 0, vz = t.v ? t.v[1] : 0;
+    // Aggressive churn, plus a shove backwards against the direction of travel
+    p.vx = (Math.random() - 0.5) * 2.2 - vx * 0.65;
+    p.vy = 0.3 + Math.random() * 0.9;
+    p.vz = (Math.random() - 0.5) * 2.2 - vz * 0.65;
+    p.life = 0.4 + Math.random() * 0.5;
+    p.age = stagger ? Math.random() * p.life : 0;
+  }
+
+  return {
+    update(dt, t, strength) {
+      for (let i = 0; i < MIST_N; i++) {
+        const p = parts[i];
+        if (first) spawn(p, t, true);
+        p.age += dt;
+        if (p.age >= p.life) spawn(p, t, false);
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        p.vx *= 0.96; p.vz *= 0.96;
+        pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+        // Bright at birth, burning down to dark amber; flicker keeps it restless
+        const k = 1 - p.age / p.life;
+        c.copy(AMBER).lerp(HOT, k * k).multiplyScalar(Math.sqrt(k) * strength * (0.5 + Math.random() * 0.5) * 0.42);
+        col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      }
+      first = false;
+      mat.size = 0.6 + Math.random() * 0.25;
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(points);
+      geo.dispose();
+      mat.dispose();
     },
   };
 }

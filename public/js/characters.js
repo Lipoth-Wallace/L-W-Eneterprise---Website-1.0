@@ -197,13 +197,10 @@ export function createCharacter(type) {
   let phase = 0;
   const state = { speed: 0 };
   const kneeL = rig.legL.userData.knee, kneeR = rig.legR.userData.knee;
-  const highlight = createHighlight(rig.root);
 
   return {
     group: rig.root,
     rig,
-    /** Scan highlight strength, 0..1 (see public/js/scan.js). */
-    setHighlight: highlight.set,
     /** pose: { vx, vz, yaw, pitch, crouch, slide, ground, weapon, hasSpear, charge } */
     update(pose, dt) {
       rig.root.rotation.y = pose.yaw;
@@ -257,38 +254,6 @@ export function createCharacter(type) {
       rig.medal.rotation.x += (swingTarget - rig.medal.rotation.x) * Math.min(1, dt * 9);
       spear.visible = !!pose.hasSpear;
       sling.visible = pose.weapon === 'sling';
-    },
-  };
-}
-
-// Scan highlight, after Hunt: Showdown's Dark Sight. A rough golden silhouette
-// drawn through walls: every mesh gets an additive, depth-test-free twin that
-// only shows while highlighted, with a flicker so it reads as "sensed", not
-// seen.
-function createHighlight(root) {
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xffb040, transparent: true, opacity: 0, depthTest: false, depthWrite: false,
-    blending: THREE.AdditiveBlending, fog: false,
-  });
-  const twins = [];
-  root.traverse((o) => {
-    if (!o.isMesh || o.userData.twin) return;
-    let cosmetic = false;
-    for (let p = o; p; p = p.parent) if (p.userData.cosmetic) cosmetic = true;
-    if (cosmetic) return;
-    const t = new THREE.Mesh(o.geometry, mat);
-    t.userData.twin = true;
-    t.scale.setScalar(1.12);        // a little larger: a haze around the body, not a paint job
-    t.renderOrder = 10;
-    t.visible = false;
-    twins.push({ o, t });
-  });
-  for (const { o, t } of twins) o.add(t);
-  return {
-    set(k) {
-      const on = k > 0.001;
-      for (const { t } of twins) t.visible = on;
-      mat.opacity = on ? k * (0.45 + 0.25 * Math.random()) : 0;
     },
   };
 }

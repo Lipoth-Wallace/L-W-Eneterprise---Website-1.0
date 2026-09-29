@@ -32,7 +32,11 @@ let game = null;
 
 const menu = setupMenu({ onStart: startMatch });
 $('scan-eyes').style.backgroundImage = `url("data:image/svg+xml;utf8,${encodeURIComponent(EYES_SVG)}")`;
-const nowS = () => performance.now() / 1000;
+// ?debug&slow=0.2 runs game time at a fraction of real time, so automated
+// browser tests on slow software renderers can capture short effects.
+const DEBUG = new URLSearchParams(location.search);
+const TIME_SCALE = DEBUG.has('debug') ? +(DEBUG.get('slow') || 1) : 1;
+const nowS = () => (performance.now() / 1000) * TIME_SCALE;
 
 // ?debug exposes hooks for automated browser tests.
 if (new URLSearchParams(location.search).has('debug')) {
@@ -891,9 +895,11 @@ function update(dt, t) {
   else updateRemotes(t, dt);
 
   // Scan: sense living fighters in the cone as the wave reaches them
+  const bodyHeight = (pose) => C.HITBOXES[pose].height - 0.2;
   const scanTargets = game.mode === 'practice'
-    ? game.bots.filter((b) => b.alive).map((b) => ({ key: b, model: b.model, p: b.p }))
-    : [...game.remotes.values()].filter((r) => r.pose && r.pose.a).map((r) => ({ key: r.id, model: r.model, p: r.pose.p }));
+    ? game.bots.filter((b) => b.alive).map((b) => ({ key: b, p: b.p, v: [0, 0], h: bodyHeight(b.pose) }))
+    : [...game.remotes.values()].filter((r) => r.pose && r.pose.a)
+      .map((r) => ({ key: r.id, p: r.pose.p, v: r.pose.v, h: bodyHeight(poseOf(r.pose.cr, r.pose.sl)) }));
   if (scan.update(nowS(), scanTargets) > 0) sfx.scanPing();
   post.uniforms.scan.value = scan.pulse(nowS()) * 0.8;
 

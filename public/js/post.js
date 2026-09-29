@@ -44,7 +44,7 @@ void main() {
   float edge = 1.0 - vig;
   c = mix(c, vec3(0.55, 0.0, 0.0), clamp(hurt * (0.35 + edge), 0.0, 0.85));
   // Scan pulse: a brief amber wash, strongest at the edges
-  c = mix(c, c * vec3(1.25, 1.0, 0.55) + vec3(0.06, 0.035, 0.0), scan * (0.3 + edge * 0.5));
+  c = mix(c, c * vec3(1.3, 0.95, 0.35) + vec3(0.07, 0.035, 0.0), scan * (0.3 + edge * 0.5));
   gl_FragColor = vec4(c, 1.0);
 }
 `;

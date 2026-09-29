@@ -63,8 +63,11 @@ Showdown's Dark Sight:
 
 - A pair of eyes shoots out from your crosshair, growing exponentially.
 - A wavefront expands through a **cone in front of you** (40° each side,
-  60 m). Any fighter it reaches glows as a rough golden silhouette **through
-  walls and foliage** for about 2 seconds.
+  60 m). Any fighter it reaches is wreathed in a churning **amber mist**,
+  seen **through walls and foliage** for about 2 seconds. It's a rough
+  body-sized cloud, not an outline you could line up a headshot on, and it
+  streams out behind a moving fighter so you can read which way they're
+  heading.
 - **The catch:** your opponent sees your eyes fly out from where you're
   standing, and hears a whisper from your direction. Scanning gives away your
   position.

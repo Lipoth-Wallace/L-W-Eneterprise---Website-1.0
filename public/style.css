@@ -212,7 +212,7 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
 #scan-eyes {
   position: absolute; left: 50%; top: 50%; width: 120px; height: 40px; margin: -20px 0 0 -60px;
   background-size: contain; background-repeat: no-repeat; opacity: 0; pointer-events: none;
-  filter: drop-shadow(0 0 6px #ff9a2a);
+  filter: drop-shadow(0 0 6px #ffa000);
 }
 /* Exponential growth: the ease-in curve keeps it small, then it explodes outward */
 #scan-eyes.go { animation: scan-eyes 0.7s cubic-bezier(0.8, 0, 1, 0.6) forwards; }
@@ -221,9 +221,9 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
   70% { opacity: 0.9; }
   100% { transform: scale(14); opacity: 0; }
 }
-.weapon.scan .bar i { background: #ffb03a; }
+.weapon.scan .bar i { background: #ffb000; }
 .weapon.scan .bar i.loading { background: #6a4a20; }
-.weapon.scan.ready { border-color: #ffb03a; opacity: 1; }
+.weapon.scan.ready { border-color: #ffb000; opacity: 1; }
 
 /* ---------- Inside a bush ---------- */
 #bush-overlay {
