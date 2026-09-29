@@ -33,6 +33,7 @@ Default controls (all rebindable under **Settings → Controls**):
 | `LMB` | Stab (spear out) or sling shot (sling out) |
 | `RMB` | Hold to draw the spear back (0.18 s), release to throw |
 | `F` | Quick stab from either weapon |
+| `E` | Scan (every 3.75 s) |
 | `Q`, `1`/`2`, wheel | Swap weapon |
 | `R` | Restart the parkour course (practice) |
 
@@ -53,6 +54,43 @@ fullscreen.
   Jumping out of a slide keeps that speed. Landing with crouch still held
   drops you into another slide. Air strafing adds speed. The jump is low
   (about 1.3 m).
+
+## Seeing in the dark: the scan
+
+The maps are dark on purpose, and fighters in shadow are hard to spot. The
+scan (`E`, every 3.75 s) is how you cut through that. It's inspired by Hunt:
+Showdown's Dark Sight:
+
+- A pair of eyes shoots out from your crosshair, growing exponentially.
+- A wavefront expands through a **cone in front of you** (40° each side,
+  60 m). Any fighter it reaches glows as a rough golden silhouette **through
+  walls and foliage** for about 2 seconds.
+- **The catch:** your opponent sees your eyes fly out from where you're
+  standing, and hears a whisper from your direction. Scanning gives away your
+  position.
+
+## Hitboxes
+
+Both fighters share one skeleton, so they fill the same space and every pose
+has a hitbox matched to it: standing, crouched, or long and low for a slide.
+The boxes turn with the player's facing. `test/hitbox.test.js` measures every
+pose of both skins and fails if anything visible pokes out of its box (beyond
+0.07 m) or the box sits well above the head. That means a shot that looks
+like a hit is a hit. Weapons are the one exception: a spear sticking out of
+the box isn't part of the target.
+
+## Arenas
+
+Pick one on the title screen (**Random** by default). A room keeps the map it
+was created with, and anyone who joins by code plays on that map.
+
+- **The Kiln:** the 60 x 60 m brutalist cave.
+- **The Thicket:** a 90 x 90 m night forest under the red moon (1.5x the Kiln
+  on each side), with a ruined shrine in the middle. It has about 50 trees:
+  the trunks block shots, the canopy doesn't. There are logs and boulders for
+  cover, and **8 bushes**. Stand inside a bush and nobody can see you: you
+  see out through faded leaves, they see a solid bush. Stones still go
+  through foliage, moving inside a bush rustles, and a scan will find you.
 
 ## Practice range
 
@@ -91,11 +129,13 @@ server/index.js    HTTP + WebSocket server, rooms, snapshot loop
 server/room.js     One match: hit checks, lag compensation, spear, score
 shared/            Code the server and browser both load
   constants.js     Every tuning number
-  map.js           Map registry (MAP = the online arena)
+  map.js           Map registry (arenas + practice map)
   maps/kiln.js     The Kiln: 1v1 cave arena
+  maps/thicket.js  The Thicket: 1v1 forest arena
   maps/range.js    The Quarry: practice range and parkour course
   physics.js       Player movement
-  raycast.js       Hitscan maths
+  raycast.js       Hitscan maths, per-pose turning hitboxes
+  scan.js          Scan wave and cone maths
 public/            The client (three.js, no build step)
   js/main.js       Input, networking, interpolation, camera, HUD
   js/world.js      Cave scene built from shared/map.js
@@ -106,6 +146,7 @@ public/            The client (three.js, no build step)
   js/audio.js      Synthesised sound, mixer channels and the beats
   js/settings.js   Settings, keybinds, the Settings panel
   js/chain.js      First-person gold chain (verlet rope)
+  js/scan.js       The scan: eyes, wave, through-wall highlight
 test/              node:test suites
 ```
 

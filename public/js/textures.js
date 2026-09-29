@@ -100,6 +100,34 @@ function slab(g, s, r) {
   g.fillRect(0, 0, s, 1);
 }
 
+// Forest floor: dark moss and dirt with scattered leaf litter
+function grass(g, s, r) {
+  noise(g, s, r, [34, 38, 26], 22);
+  blotches(g, s, r, 60, 'rgba(20,14,10,0.45)', 6);
+  blotches(g, s, r, 40, 'rgba(60,70,36,0.35)', 3);
+  blotches(g, s, r, 18, 'rgba(90,30,16,0.35)', 2);   // fallen leaves
+}
+
+// Bark: vertical ridges
+function bark(g, s, r) {
+  noise(g, s, r, [44, 32, 26], 20);
+  for (let x = 0; x < s; x += 3 + Math.floor(r() * 4)) {
+    g.fillStyle = `rgba(10,6,4,${0.4 + r() * 0.4})`;
+    g.fillRect(x, 0, 1, s);
+  }
+  blotches(g, s, r, 12, 'rgba(50,60,30,0.35)', 5);   // moss
+}
+
+// Foliage: clumped leaf shapes
+function leaves(g, s, r) {
+  noise(g, s, r, [24, 34, 20], 26);
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(12,20,10,0.6)' : 'rgba(46,60,30,0.5)';
+    const x = r() * s, y = r() * s;
+    g.fillRect(x, y, 2 + r() * 3, 1 + r() * 2);
+  }
+}
+
 let cache = null;
 export function getTextures() {
   if (cache) return cache;
@@ -108,6 +136,9 @@ export function getTextures() {
     rock: canvasTexture(64, rock, 23),
     floor: canvasTexture(64, floor, 37),
     slab: canvasTexture(64, slab, 41),
+    grass: canvasTexture(64, grass, 53),
+    bark: canvasTexture(64, bark, 59),
+    leaves: canvasTexture(64, leaves, 61),
   };
   return cache;
 }

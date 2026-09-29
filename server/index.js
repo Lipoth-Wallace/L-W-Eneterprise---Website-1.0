@@ -10,6 +10,7 @@ import os from 'node:os';
 import { WebSocketServer } from 'ws';
 import { Room } from './room.js';
 import { SNAPSHOT_RATE } from '../shared/constants.js';
+import { ARENAS } from '../shared/map.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -36,21 +37,26 @@ export function startServer({ port = PORT, log = console.log } = {}) {
     return code;
   }
 
-  function findRoom(requested, wantPrivate) {
+  // mapPref: an arena id, or 'random'. Joining by code always uses that
+  // room's map; quick match prefers a waiting room on the map you picked.
+  function findRoom(requested, wantPrivate, mapPref) {
+    const pick = ARENAS.includes(mapPref) ? mapPref : ARENAS[Math.floor(Math.random() * ARENAS.length)];
     if (requested) {
       const code = String(requested).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
       const r = rooms.get(code);
       if (r) return r.full ? { error: 'That room is full.' } : { room: r };
       if (code.length !== 4) return { error: 'Room codes are four letters.' };
-      const created = new Room(code, { isPrivate: true });
+      const created = new Room(code, { isPrivate: true, map: pick });
       rooms.set(code, created);
       return { room: created };
     }
     if (!wantPrivate) {
-      for (const r of rooms.values()) if (!r.isPrivate && r.players.size === 1) return { room: r };
+      const waiting = [...rooms.values()].filter((r) => !r.isPrivate && r.players.size === 1);
+      const match = waiting.find((r) => mapPref === 'random' || r.map.id === mapPref) || waiting[0];
+      if (match) return { room: match };
     }
     const code = makeCode();
-    const created = new Room(code, { isPrivate: !!wantPrivate });
+    const created = new Room(code, { isPrivate: !!wantPrivate, map: pick });
     rooms.set(code, created);
     return { room: created };
   }
@@ -71,7 +77,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       if (!m || typeof m !== 'object') return;
 
       if (m.t === 'join' && !room) {
-        const found = findRoom(m.room, m.private);
+        const found = findRoom(m.room, m.private, m.map);
         if (found.error) { send({ t: 'error', message: found.error }); return; }
         room = found.room;
         player = room.addPlayer(send, { name: m.name, character: m.character });
@@ -82,6 +88,7 @@ export function startServer({ port = PORT, log = console.log } = {}) {
       if (m.t === 'state') room.handleState(player, m);
       else if (m.t === 'fire') room.handleFire(player, m);
       else if (m.t === 'charge') room.handleCharge(player, m);
+      else if (m.t === 'scan') room.handleScan(player, m);
       else if (m.t === 'ping') send({ t: 'pong', c: m.c, time: room.now() });
     });
 

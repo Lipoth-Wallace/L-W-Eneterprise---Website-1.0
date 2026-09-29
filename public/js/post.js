@@ -14,6 +14,7 @@ const frag = /* glsl */`
 precision highp float;
 uniform sampler2D tDiffuse;
 uniform float hurt;
+uniform float scan;
 uniform float levels;
 uniform float time;
 varying vec2 vUv;
@@ -42,6 +43,8 @@ void main() {
   c *= mix(0.5, 1.0, vig);
   float edge = 1.0 - vig;
   c = mix(c, vec3(0.55, 0.0, 0.0), clamp(hurt * (0.35 + edge), 0.0, 0.85));
+  // Scan pulse: a brief amber wash, strongest at the edges
+  c = mix(c, c * vec3(1.25, 1.0, 0.55) + vec3(0.06, 0.035, 0.0), scan * (0.3 + edge * 0.5));
   gl_FragColor = vec4(c, 1.0);
 }
 `;
@@ -53,7 +56,7 @@ export function createPost(renderer) {
     depthBuffer: true,
   });
   const material = new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: target.texture }, hurt: { value: 0 }, levels: { value: 14 }, time: { value: 0 } },
+    uniforms: { tDiffuse: { value: target.texture }, hurt: { value: 0 }, scan: { value: 0 }, levels: { value: 14 }, time: { value: 0 } },
     vertexShader: vert,
     fragmentShader: frag,
     depthTest: false,

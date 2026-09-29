@@ -17,7 +17,9 @@
   <canvas id="game"></canvas>
 
   <!-- In-game HUD -->
+  <div id="bush-overlay" hidden></div>
   <div id="hud" hidden>
+    <div id="scan-eyes"></div>
     <div id="crosshair"><i></i><i></i><i></i><i></i></div>
     <div id="hitmarker"></div>
     <div id="scoreboard">
@@ -44,6 +46,7 @@
     <div id="weapons">
       <div class="weapon" id="w-spear"><span class="key">1</span><span class="label">SPEAR</span><span class="state" id="spear-state">HELD</span></div>
       <div class="weapon" id="w-sling"><span class="key">2</span><span class="label">SLING</span><span class="bar"><i id="sling-bar"></i></span></div>
+      <div class="weapon scan" id="w-scan"><span class="key" id="scan-key">E</span><span class="label">SCAN</span><span class="bar"><i id="scan-bar"></i></span></div>
     </div>
     <div id="pause" hidden>
       <div class="pause-box">
@@ -83,6 +86,13 @@
             <span>Name</span>
             <input id="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Caveman">
           </label>
+          <label class="field row arena"><span>Arena</span>
+            <select id="arena">
+              <option value="random">Random</option>
+              <option value="kiln">The Kiln · cave</option>
+              <option value="thicket">The Thicket · forest</option>
+            </select>
+          </label>
           <button id="quick" class="btn primary">Quick match</button>
           <button id="create" class="btn">Private room</button>
           <div class="join-row">
@@ -105,8 +115,9 @@
         <div><kbd>LMB</kbd> stab / sling</div>
         <div><kbd>RMB</kbd> hold to draw, release to throw</div>
         <div><kbd>F</kbd> quick stab</div>
+        <div><kbd>E</kbd> scan (every 3.75 s)</div>
         <div><kbd>Q</kbd>/<kbd>1</kbd><kbd>2</kbd>/wheel swap</div>
-        <div class="tip">Sprint, slide, jump out of it, land still crouching: chain it. Strafe in the air to go faster. The thrown spear has a fat hitbox; the sling needs a clean hit. Rebind anything in Settings.</div>
+        <div class="tip">Sprint, slide, jump out of it, land still crouching: chain it. Strafe in the air to go faster. The dark is on purpose: scan to sense who's in front of you, even through walls and bushes. The thrown spear has a fat hitbox; the sling needs a clean hit. Rebind anything in Settings.</div>
       </section>
     </div>
   </div>

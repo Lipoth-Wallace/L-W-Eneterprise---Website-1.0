@@ -73,141 +73,182 @@ export function makeSpearMesh(scale = 1) {
   return g;
 }
 
+// ---------------------------------------------------------------- shared skeleton
+//
+// Both fighters use the same skeleton and proportions, so each pose fills the
+// same envelope and the hitboxes in shared/raycast.js can match it exactly.
+// The skins only change decoration inside that envelope. test/hitbox.test.js
+// measures every pose against its hitbox.
+
+const HIP = 0.84;     // hip height standing
+const THIGH = 0.42;
+const SHIN = 0.42;
+
+// Leg: thigh from the hip, a knee joint, then shin and foot. leg.rotation.x
+// swings the thigh (positive = forward); leg.userData.knee.rotation.x bends the
+// knee (negative = shin folds back).
+function leg(x, w, d, mat, footMat) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, 0, 0);
+  pivot.add(box(w, THIGH, d, mat, 0, -THIGH / 2, 0));
+  const knee = new THREE.Group();
+  knee.position.y = -THIGH;
+  knee.add(box(w * 0.9, SHIN - 0.03, d * 0.9, mat, 0, -(SHIN - 0.03) / 2, 0));
+  knee.add(box(w, 0.07, d + 0.08, footMat, 0, -SHIN + 0.035, -0.04));
+  pivot.add(knee);
+  pivot.userData.knee = knee;
+  return pivot;
+}
+
+function skeleton({ legX, legW, legD, legMat, footMat }) {
+  const root = new THREE.Group();
+  const hips = new THREE.Group();
+  hips.position.y = HIP;
+  root.add(hips);
+  const legL = leg(-legX, legW, legD, legMat, footMat);
+  const legR = leg(legX, legW, legD, legMat, footMat);
+  hips.add(legL, legR);
+  const torso = new THREE.Group();
+  hips.add(torso);
+  const head = new THREE.Group();
+  head.position.set(0, 0.76, -0.02);
+  torso.add(head);
+  return { root, hips, torso, head, legL, legR };
+}
+
 function buildBrute() {
   const skin = lam(0x8a5a44), hide = lam(0x3a2820), fur = lam(0x2a1c16), bone = lam(0xe0d0b0, { emissive: 0x3a2a1a });
   const eye = new THREE.MeshBasicMaterial({ color: 0xff2010 });
-  const root = new THREE.Group();
-  const hips = new THREE.Group();
-  hips.position.y = 0.85;
-  root.add(hips);
+  const sk = skeleton({ legX: 0.15, legW: 0.22, legD: 0.24, legMat: hide, footMat: fur });
+  const { torso, head } = sk;
 
-  const legL = limb(0.3, 0.85, 0.32, hide, -0.2, 0, 0);
-  const legR = limb(0.3, 0.85, 0.32, hide, 0.2, 0, 0);
-  hips.add(legL, legR);
+  torso.add(box(0.56, 0.24, 0.36, hide, 0, 0.1, 0));             // loincloth belt
+  torso.add(box(0.74, 0.54, 0.44, skin, 0, 0.47, 0));             // chest
+  torso.add(box(0.84, 0.18, 0.5, fur, 0, 0.74, 0.01));            // fur mantle
+  for (let i = 0; i < 3; i++) torso.add(spike(0.05, 0.2, bone, -0.2 + i * 0.2, 0.84, 0.2, -0.7));
 
-  const torso = new THREE.Group();
-  hips.add(torso);
-  torso.add(box(0.62, 0.3, 0.42, hide, 0, 0.12, 0));            // loincloth belt
-  torso.add(box(0.95, 0.62, 0.55, skin, 0, 0.55, 0));            // chest
-  torso.add(box(1.25, 0.28, 0.66, fur, 0, 0.88, 0.02));          // fur mantle
-  for (let i = 0; i < 4; i++) torso.add(spike(0.07, 0.3, bone, -0.3 + i * 0.2, 1.05, 0.28, -0.6));
+  head.add(box(0.32, 0.3, 0.32, bone, 0, 0.15, -0.02));           // skull mask
+  head.add(box(0.26, 0.1, 0.08, lam(0x0b0706), 0, 0.12, -0.16));  // brow shadow
+  head.add(box(0.06, 0.045, 0.02, eye, -0.07, 0.13, -0.2));
+  head.add(box(0.06, 0.045, 0.02, eye, 0.07, 0.13, -0.2));
+  head.add(spike(0.045, 0.22, bone, -0.17, 0.3, 0, 0, 1.0));      // horns, swept out sideways
+  head.add(spike(0.045, 0.22, bone, 0.17, 0.3, 0, 0, -1.0));
+  head.add(box(0.22, 0.07, 0.04, bone, 0, -0.01, -0.18));         // teeth row
 
-  const head = new THREE.Group();
-  head.position.set(0, 1.02, -0.12);
-  torso.add(head);
-  head.add(box(0.36, 0.36, 0.38, bone, 0, 0.16, -0.02));         // skull mask
-  head.add(box(0.3, 0.12, 0.1, lam(0x0b0706), 0, 0.12, -0.2));    // brow shadow
-  head.add(box(0.07, 0.05, 0.02, eye, -0.08, 0.13, -0.26));
-  head.add(box(0.07, 0.05, 0.02, eye, 0.08, 0.13, -0.26));
-  head.add(spike(0.06, 0.45, bone, -0.24, 0.42, 0, 0, 0.7));      // horns
-  head.add(spike(0.06, 0.45, bone, 0.24, 0.42, 0, 0, -0.7));
-  head.add(box(0.26, 0.08, 0.05, bone, 0, -0.02, -0.21));         // teeth row
-
-  const armL = limb(0.24, 0.78, 0.26, skin, -0.62, 0.8, 0);
-  const armR = limb(0.24, 0.78, 0.26, skin, 0.62, 0.8, 0);
-  armL.add(box(0.28, 0.22, 0.3, fur, 0, -0.1, 0));
-  armR.add(box(0.28, 0.22, 0.3, fur, 0, -0.1, 0));
+  const armL = limb(0.16, 0.66, 0.18, skin, -0.41, 0.72, 0);
+  const armR = limb(0.16, 0.66, 0.18, skin, 0.41, 0.72, 0);
+  armL.add(box(0.18, 0.16, 0.2, fur, 0, -0.06, 0));
+  armR.add(box(0.18, 0.16, 0.2, fur, 0, -0.06, 0));
   torso.add(armL, armR);
-  torso.rotation.x = -0.28;                                      // hunched
-  const medal = addChain(torso, { y: 0.84, z: -0.04, r: 0.26 });
-  return { root, hips, torso, head, legL, legR, armL, armR, eye, medal };
+  const medal = addChain(torso, { y: 0.72, z: -0.03, r: 0.22 });
+  return { ...sk, armL, armR, eye, medal, lean: -0.12 };
 }
 
 function buildStalker() {
   const skin = lam(0x6a5048), hide = lam(0x2e221c), hair = lam(0x1a1210), bone = lam(0xe0d4b8, { emissive: 0x3a2a1a });
   const paint = new THREE.MeshBasicMaterial({ color: 0xb4140a });
   const eye = new THREE.MeshBasicMaterial({ color: 0xff3a1a });
-  const root = new THREE.Group();
-  const hips = new THREE.Group();
-  hips.position.y = 0.9;
-  root.add(hips);
+  const sk = skeleton({ legX: 0.14, legW: 0.19, legD: 0.21, legMat: hide, footMat: hide });
+  const { torso, head } = sk;
 
-  const legL = limb(0.2, 0.9, 0.22, hide, -0.15, 0, 0);
-  const legR = limb(0.2, 0.9, 0.22, hide, 0.15, 0, 0);
-  hips.add(legL, legR);
-
-  const torso = new THREE.Group();
-  hips.add(torso);
-  torso.add(box(0.44, 0.22, 0.28, hide, 0, 0.1, 0));
-  torso.add(box(0.6, 0.62, 0.34, skin, 0, 0.52, 0));
+  torso.add(box(0.5, 0.22, 0.32, hide, 0, 0.1, 0));
+  torso.add(box(0.66, 0.54, 0.38, skin, 0, 0.47, 0));
+  torso.add(box(0.78, 0.1, 0.4, bone, 0, 0.72, 0));               // bone collar across the shoulders
   // War paint: three slashes across the chest
-  for (let i = 0; i < 3; i++) torso.add(box(0.5, 0.035, 0.02, paint, 0, 0.4 + i * 0.12, -0.175));
+  for (let i = 0; i < 3; i++) torso.add(box(0.54, 0.035, 0.02, paint, 0, 0.34 + i * 0.12, -0.195));
 
-  const head = new THREE.Group();
-  head.position.set(0, 0.92, -0.08);
-  torso.add(head);
-  head.add(box(0.28, 0.32, 0.3, skin, 0, 0.16, 0));
-  head.add(box(0.3, 0.12, 0.08, bone, 0, 0.02, -0.17));          // jawbone mask
-  for (let i = 0; i < 4; i++) head.add(box(0.03, 0.06, 0.03, bone, -0.09 + i * 0.06, 0.09, -0.21));
-  head.add(box(0.3, 0.04, 0.02, paint, 0, 0.24, -0.16));         // paint band over the eyes
-  head.add(box(0.06, 0.04, 0.02, eye, -0.07, 0.2, -0.165));
-  head.add(box(0.06, 0.04, 0.02, eye, 0.07, 0.2, -0.165));
-  for (let i = 0; i < 5; i++) head.add(spike(0.06, 0.5, hair, -0.12 + i * 0.06, 0.3, 0.12, 1.1 + (i % 2) * 0.2, 0));
+  head.add(box(0.28, 0.3, 0.3, skin, 0, 0.15, 0));
+  head.add(box(0.3, 0.11, 0.08, bone, 0, 0.02, -0.17));           // jawbone mask
+  for (let i = 0; i < 4; i++) head.add(box(0.03, 0.05, 0.03, bone, -0.09 + i * 0.06, 0.09, -0.21));
+  head.add(box(0.3, 0.04, 0.02, paint, 0, 0.22, -0.16));          // paint band over the eyes
+  head.add(box(0.06, 0.04, 0.02, eye, -0.07, 0.19, -0.165));
+  head.add(box(0.06, 0.04, 0.02, eye, 0.07, 0.19, -0.165));
+  // Matted mane swept back and down
+  for (let i = 0; i < 5; i++) head.add(spike(0.06, 0.42, hair, -0.12 + i * 0.06, 0.2, 0.2, 1.9 + (i % 2) * 0.2, 0));
 
-  const armL = limb(0.15, 0.85, 0.16, skin, -0.4, 0.78, 0);
-  const armR = limb(0.15, 0.85, 0.16, skin, 0.4, 0.78, 0);
-  armL.add(box(0.17, 0.035, 0.18, paint, 0, -0.3, 0));
-  armR.add(box(0.17, 0.035, 0.18, paint, 0, -0.3, 0));
+  const armL = limb(0.14, 0.68, 0.15, skin, -0.39, 0.72, 0);
+  const armR = limb(0.14, 0.68, 0.15, skin, 0.39, 0.72, 0);
+  armL.add(box(0.16, 0.035, 0.17, paint, 0, -0.26, 0));
+  armR.add(box(0.16, 0.035, 0.17, paint, 0, -0.26, 0));
   torso.add(armL, armR);
-  torso.rotation.x = -0.42;                                      // stalking crouch
-  hips.position.y = 0.82;
-  const medal = addChain(torso, { y: 0.8, z: -0.02, r: 0.19 });
-  return { root, hips, torso, head, legL, legR, armL, armR, eye, medal };
+  const medal = addChain(torso, { y: 0.72, z: -0.02, r: 0.2 });
+  return { ...sk, armL, armR, eye, medal, lean: -0.2 };
 }
 
 export function createCharacter(type) {
   const rig = type === 'stalker' ? buildStalker() : buildBrute();
-  const baseHip = rig.hips.position.y;
-  const baseLean = rig.torso.rotation.x;
+  const baseLean = rig.lean;
+  rig.torso.rotation.x = baseLean;
 
   const spear = makeSpearMesh(0.85);
   spear.rotation.x = -Math.PI / 2 + 0.15;
-  spear.position.set(0, -0.7, -0.1);
+  spear.position.set(0, -0.62, -0.1);
+  spear.userData.cosmetic = true;      // weapons stick out of the hitbox on purpose
   rig.armR.add(spear);
 
   // Sling: a cord hanging from the left hand with a stone pouch on the end.
   const sling = new THREE.Group();
-  sling.add(box(0.015, 0.5, 0.015, lam(0x6a4a30), 0, -0.25, 0));
-  sling.add(box(0.1, 0.08, 0.1, lam(0x3a2a1c), 0, -0.52, 0));
-  sling.position.set(0, -0.75, 0);
+  sling.add(box(0.015, 0.4, 0.015, lam(0x6a4a30), 0, -0.2, 0));
+  sling.add(box(0.1, 0.08, 0.1, lam(0x3a2a1c), 0, -0.42, 0));
+  sling.position.set(0, -0.64, 0);
+  sling.userData.cosmetic = true;
   rig.armL.add(sling);
 
   let phase = 0;
   const state = { speed: 0 };
+  const kneeL = rig.legL.userData.knee, kneeR = rig.legR.userData.knee;
+  const highlight = createHighlight(rig.root);
 
   return {
     group: rig.root,
     rig,
+    /** Scan highlight strength, 0..1 (see public/js/scan.js). */
+    setHighlight: highlight.set,
     /** pose: { vx, vz, yaw, pitch, crouch, slide, ground, weapon, hasSpear, charge } */
     update(pose, dt) {
       rig.root.rotation.y = pose.yaw;
       const speed = Math.hypot(pose.vx || 0, pose.vz || 0);
       state.speed += (speed - state.speed) * Math.min(1, dt * 10);
       phase += state.speed * dt * 1.4;
-      const swing = Math.min(1, state.speed / 8) * 0.9;
+      const swing = Math.min(1, state.speed / 8);
 
-      let hip = baseHip, lean = baseLean, legA = Math.sin(phase) * swing, legB = -legA;
-      let armA = -legA * 0.8, armB = legA * 0.8, headPitch = 0;
+      // Walk cycle: thighs swing, the back leg's knee folds.
+      const s = Math.sin(phase);
+      let hip = HIP, lean = baseLean;
+      let thighL = s * 0.42 * swing, thighR = -s * 0.42 * swing;
+      let kneeLA = -Math.max(0, -s) * 0.5 * swing, kneeRA = -Math.max(0, s) * 0.5 * swing;
+      let armA = -thighL * 1.1, armB = -thighR * 1.1, hipZ = 0;
       if (pose.slide) {
-        hip = 0.45; lean = 0.35; legA = 1.3; legB = 1.0; armA = -0.6; armB = 0.3;
+        // Leaning back, lead leg out front, the other tucked under
+        hip = 0.47; lean = 0.7; hipZ = -0.05;
+        thighL = 1.25; kneeLA = -0.4; thighR = 0.9; kneeRA = -2.3;
+        armA = -0.4; armB = 0.2;
       } else if (pose.crouch) {
-        hip = baseHip * 0.6; lean = baseLean - 0.35; legA = legA * 0.6 + 0.8; legB = legB * 0.6 + 0.8;
+        // Thighs near level, shins straight down, back bent
+        hip = 0.47; lean = baseLean - 0.3; hipZ = 0.1;
+        thighL = 1.5 + s * 0.08 * swing; thighR = 1.5 - s * 0.08 * swing;
+        kneeLA = -thighL; kneeRA = -thighR;
+        armA = 0.25; armB = 0.25;
       } else if (!pose.ground) {
-        legA = 0.7; legB = -0.4; armA = 0.9; armB = 0.5;
+        thighL = 0.6; kneeLA = -0.9; thighR = -0.15; kneeRA = -0.6;
+        armA = 0.7; armB = 0.4;
       }
       // Arms come up to ready the current weapon.
-      if (pose.weapon === 'spear' && pose.hasSpear) armB = 1.2;
+      if (pose.weapon === 'spear' && pose.hasSpear) armB = 1.1;
       // Winding up a throw: the arm cocks back over the shoulder. This is the tell.
-      if (pose.charge && pose.hasSpear) armB = -2.5;
-      if (pose.weapon === 'sling') armA = 1.1;
-      // Keep the head level in the world, then tilt it partway toward the aim.
-      headPitch = (pose.pitch || 0) * 0.6 - lean;
+      if (pose.charge && pose.hasSpear) armB = -1.9;
+      if (pose.weapon === 'sling') armA = 1.0;
+      // Keep the head roughly level in the world, then tilt it toward the aim.
+      const headPitch = Math.max(-0.6, Math.min(0.6, (pose.pitch || 0) * 0.5)) - lean;
 
       const k = Math.min(1, dt * 14);
       rig.hips.position.y += (hip - rig.hips.position.y) * k;
+      rig.hips.position.z += (hipZ - rig.hips.position.z) * k;
       rig.torso.rotation.x += (lean - rig.torso.rotation.x) * k;
-      rig.legL.rotation.x += (legA - rig.legL.rotation.x) * k;
-      rig.legR.rotation.x += (legB - rig.legR.rotation.x) * k;
+      rig.legL.rotation.x += (thighL - rig.legL.rotation.x) * k;
+      rig.legR.rotation.x += (thighR - rig.legR.rotation.x) * k;
+      kneeL.rotation.x += (kneeLA - kneeL.rotation.x) * k;
+      kneeR.rotation.x += (kneeRA - kneeR.rotation.x) * k;
       rig.armL.rotation.x += (armA - rig.armL.rotation.x) * k;
       rig.armR.rotation.x += (armB - rig.armR.rotation.x) * k;
       rig.head.rotation.x += (headPitch - rig.head.rotation.x) * k;
@@ -216,6 +257,38 @@ export function createCharacter(type) {
       rig.medal.rotation.x += (swingTarget - rig.medal.rotation.x) * Math.min(1, dt * 9);
       spear.visible = !!pose.hasSpear;
       sling.visible = pose.weapon === 'sling';
+    },
+  };
+}
+
+// Scan highlight, after Hunt: Showdown's Dark Sight. A rough golden silhouette
+// drawn through walls: every mesh gets an additive, depth-test-free twin that
+// only shows while highlighted, with a flicker so it reads as "sensed", not
+// seen.
+function createHighlight(root) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffb040, transparent: true, opacity: 0, depthTest: false, depthWrite: false,
+    blending: THREE.AdditiveBlending, fog: false,
+  });
+  const twins = [];
+  root.traverse((o) => {
+    if (!o.isMesh || o.userData.twin) return;
+    let cosmetic = false;
+    for (let p = o; p; p = p.parent) if (p.userData.cosmetic) cosmetic = true;
+    if (cosmetic) return;
+    const t = new THREE.Mesh(o.geometry, mat);
+    t.userData.twin = true;
+    t.scale.setScalar(1.12);        // a little larger: a haze around the body, not a paint job
+    t.renderOrder = 10;
+    t.visible = false;
+    twins.push({ o, t });
+  });
+  for (const { o, t } of twins) o.add(t);
+  return {
+    set(k) {
+      const on = k > 0.001;
+      for (const { t } of twins) t.visible = on;
+      mat.opacity = on ? k * (0.45 + 0.25 * Math.random()) : 0;
     },
   };
 }

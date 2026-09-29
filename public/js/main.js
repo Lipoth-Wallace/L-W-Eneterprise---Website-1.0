@@ -7,16 +7,17 @@ import * as THREE from 'three';
 import * as C from '/shared/constants.js';
 import { MAPS } from '/shared/map.js';
 import { createPlayerState, stepPlayer, eyeHeight } from '/shared/physics.js';
-import { rayMap, rayBox, aimDir, playerHitbox, hitboxBonus, spearRestPoint } from '/shared/raycast.js';
+import { rayMap, rayPlayer, aimDir, poseOf, hitboxBonus, spearRestPoint } from '/shared/raycast.js';
 import { buildWorld } from './world.js';
 import { createCharacter, CHARACTER_INFO } from './characters.js';
 import { createViewmodel } from './viewmodel.js';
 import { createEffects } from './effects.js';
 import { createPost } from './post.js';
-import { initAudio, sfx, applyVolumes, playMusic, setMusicMuffled } from './audio.js';
+import { initAudio, sfx, applyVolumes, playMusic, setMusicMuffled, setAmbience } from './audio.js';
 import { setupMenu } from './menu.js';
-import { settings, actionsFor, onSettingsChange } from './settings.js';
+import { settings, actionsFor, onSettingsChange, keyName } from './settings.js';
 import { createChain } from './chain.js';
+import { createScan, EYES_SVG } from './scan.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -26,16 +27,17 @@ const BOT_RESPAWN = 1.5;
 
 let renderer, post, camera;
 let scene = null, world = null, effects = null;
-let vm = null, chain = null;
+let vm = null, chain = null, scan = null;
 let game = null;
 
 const menu = setupMenu({ onStart: startMatch });
+$('scan-eyes').style.backgroundImage = `url("data:image/svg+xml;utf8,${encodeURIComponent(EYES_SVG)}")`;
 const nowS = () => performance.now() / 1000;
 
 // ?debug exposes hooks for automated browser tests.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__bf = {
-    get game() { return game; }, tryStab, trySling, startCharge, releaseCharge,
+    get game() { return game; }, tryStab, trySling, tryScan, startCharge, releaseCharge,
     get camera() { return camera; },
   };
 }
@@ -79,6 +81,9 @@ function loadMap(map) {
   scene = new THREE.Scene();
   world = buildWorld(scene, map);
   effects = createEffects(scene, map);
+  chain = createChain(scene);
+  scan = createScan(scene, $('scan-eyes'));
+  setAmbience(map.id === 'kiln' ? 'cave' : 'outdoor');
 }
 
 function resize() {
@@ -103,11 +108,11 @@ function startMatch(opts) {
   playMusic(settings.musicTrack);
   initRenderer();
   const practice = !!opts.practice;
-  const map = practice ? MAPS.range : MAPS.kiln;
+  // Online, the room decides the map; the welcome message switches to it.
+  const map = practice ? MAPS.range : MAPS[settings.map] || MAPS.kiln;
   loadMap(map);
   menu.hide();
   vm = createViewmodel(settings.character);
-  chain = createChain(scene);
   const sp = map.spawns[0];
   game = {
     settings, opts, map, mode: practice ? 'practice' : 'online',
@@ -116,7 +121,8 @@ function startMatch(opts) {
     yaw: sp.yaw, pitch: 0,
     alive: practice, weapon: 'spear', hasSpear: true, lastThrow: -10,
     nextStab: 0, nextThrow: 0, nextSling: 0, reloadedPlayed: true,
-    charging: false, chargeStart: 0, throwQueued: false,
+    charging: false, chargeStart: 0, throwQueued: false, nextScan: 0,
+    inBush: null, rustleAt: 0,
     remotes: new Map(), timeOffset: null, ping: 0, pingAt: 0,
     scores: {}, names: {}, over: 0, winner: null, respawnIn: 0,
     hurt: 0, deathAt: 0, killerId: null, deathPos: null,
@@ -151,6 +157,8 @@ function endMatch(message = '') {
   game = null;
   try { g.ws && g.ws.close(); } catch { /* already closed */ }
   sfx.setSliding(false);
+  setAmbience(null);
+  $('bush-overlay').hidden = true;
   $('hud').hidden = true;
   if (document.pointerLockElement) document.exitPointerLock();
   try { navigator.keyboard && navigator.keyboard.unlock(); } catch { /* not supported */ }
@@ -185,7 +193,7 @@ addEventListener('beforeunload', (e) => {
 function connect(opts) {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   game.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: settings.name, character: settings.character, room: opts.room, private: !!opts.private, map: settings.map }));
   ws.onmessage = (ev) => { if (game && game.ws === ws) onMessage(JSON.parse(ev.data)); };
   ws.onclose = () => { if (game && game.ws === ws) endMatch(game.myId ? 'Connection lost.' : 'Could not reach the server.'); };
 }
@@ -208,7 +216,11 @@ function onMessage(m) {
       game.isPrivate = m.isPrivate;
       $('goal').textContent = m.killsToWin;
       history.replaceState(null, '', `?room=${m.room}`);
-      $('room-info').innerHTML = `ROOM <b>${m.room}</b>`;
+      $('room-info').innerHTML = `ROOM <b>${m.room}</b> · ${esc((MAPS[m.map] || game.map).name.toUpperCase())}`;
+      if (MAPS[m.map] && m.map !== game.map.id) {
+        game.map = MAPS[m.map];
+        loadMap(game.map);
+      }
       break;
     case 'error':
       endMatch(m.message);
@@ -363,6 +375,13 @@ function onEvent(ev) {
       }
       break;
     }
+    case 'scan':
+      if (ev.id !== me) {
+        scan.remote(ev.o, ev.d, nowS());
+        const [dist, pan] = relAudio(ev.o);
+        sfx.scanDistant(dist, pan);
+      }
+      break;
     case 'win':
       if (ev.id === me) sfx.win(); else sfx.lose();
       break;
@@ -405,6 +424,7 @@ function onActionPress(action) {
     case 'spear': setWeapon('spear'); break;
     case 'sling': setWeapon('sling'); break;
     case 'reset': if (game.mode === 'practice') resetCourse(); break;
+    case 'scan': tryScan(); break;
   }
 }
 
@@ -486,6 +506,18 @@ function tryStab() {
   fire('stab');
 }
 
+function tryScan() {
+  const t = nowS();
+  if (t < game.nextScan) return;
+  game.nextScan = t + C.SCAN_COOLDOWN;
+  const L = game.local;
+  const eye = [L.x, L.y + game.eyeH, L.z];
+  const d = aimDir(game.yaw, game.pitch);
+  scan.fire(eye, d, t);
+  send({ t: 'scan', o: eye, d });
+  sfx.scan();
+}
+
 function trySling() {
   const t = nowS();
   if (t < game.nextSling) return;
@@ -534,9 +566,14 @@ function throwSpear() {
 // in practice.
 function hitTargets() {
   if (game.mode === 'practice') {
-    return game.bots.filter((b) => b.alive).map((b) => ({ ref: b, p: b.p, crouch: b.pose !== 'stand' }));
+    return game.bots.filter((b) => b.alive).map((b) => ({ ref: b, p: b.p, yaw: b.yaw, pose: b.pose }));
   }
-  return [...game.remotes.values()].filter((r) => r.pose && r.pose.a).map((r) => ({ ref: r, p: r.pose.p, crouch: !!r.pose.cr }));
+  return [...game.remotes.values()].filter((r) => r.pose && r.pose.a)
+    .map((r) => ({ ref: r, p: r.pose.p, yaw: r.pose.yaw, pose: poseOf(r.pose.cr, r.pose.sl) }));
+}
+
+function rayTarget(eye, d, range, target, bonus) {
+  return rayPlayer(eye, d, range, { x: target.p[0], y: target.p[1], z: target.p[2], yaw: target.yaw }, target.pose, bonus);
 }
 
 function fire(kind) {
@@ -552,8 +589,7 @@ function fire(kind) {
   const wall = rayMap(eye, d, range, boxes);
   let endT = Math.min(wall.t, range), hit = null;
   for (const target of hitTargets()) {
-    const hb = playerHitbox(target.p[0], target.p[1], target.p[2], target.crouch, hitboxBonus(kind));
-    const t = rayBox(eye, d, hb.min, hb.max, range);
+    const t = rayTarget(eye, d, range, target, hitboxBonus(kind));
     if (t < endT) { endT = t; hit = target; }
   }
   const end = [eye[0] + d[0] * endT, eye[1] + d[1] * endT, eye[2] + d[2] * endT];
@@ -740,6 +776,44 @@ function updateRemotes(t, dt) {
   }
 }
 
+// ---------------------------------------------------------------- bushes
+
+function bushAt(x, y, z) {
+  for (const b of world.bushes) {
+    if (Math.hypot(x - b.p[0], z - b.p[1]) < b.r * 0.62 && y < b.h) return b;
+  }
+  return null;
+}
+
+// Standing in a bush: its leaves fade for you (so you can see out) while
+// staying solid for everyone else, and a leafy vignette frames the view.
+// Moving through one rustles, for you and for anyone nearby.
+function updateBushes(t) {
+  if (!world.bushes.length) return;
+  const L = game.local;
+  const inside = game.alive ? bushAt(L.x, L.y + 0.5, L.z) : null;
+  if (inside !== game.inBush) {
+    if (inside) sfx.rustle();
+    game.inBush = inside;
+    $('bush-overlay').hidden = !inside;
+  }
+  for (const b of world.bushes) {
+    const target = b === inside ? 0.22 : 1;
+    b.mat.opacity += (target - b.mat.opacity) * 0.25;
+    b.mat.depthWrite = b.mat.opacity > 0.9;
+  }
+  if (inside && Math.hypot(L.vx, L.vz) > 2 && t - game.rustleAt > 0.5) { game.rustleAt = t; sfx.rustle(); }
+  for (const r of game.remotes.values()) {
+    const p = r.pose;
+    if (!p || !p.a || Math.hypot(p.v[0], p.v[1]) < 2 || !bushAt(p.p[0], p.p[1] + 0.5, p.p[2])) continue;
+    if (t - (r.rustleAt || 0) > 0.5) {
+      r.rustleAt = t;
+      const [dist, pan] = relAudio(p.p);
+      if (dist < 30) sfx.rustle(dist, pan);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- frame
 
 let last = performance.now();
@@ -815,6 +889,15 @@ function update(dt, t) {
 
   if (game.mode === 'practice') updatePractice(t, dt);
   else updateRemotes(t, dt);
+
+  // Scan: sense living fighters in the cone as the wave reaches them
+  const scanTargets = game.mode === 'practice'
+    ? game.bots.filter((b) => b.alive).map((b) => ({ key: b, model: b.model, p: b.p }))
+    : [...game.remotes.values()].filter((r) => r.pose && r.pose.a).map((r) => ({ key: r.id, model: r.model, p: r.pose.p }));
+  if (scan.update(nowS(), scanTargets) > 0) sfx.scanPing();
+  post.uniforms.scan.value = scan.pulse(nowS()) * 0.8;
+
+  updateBushes(t);
 
   // Camera
   game.eyeH += (eyeHeight(L) - game.eyeH) * Math.min(1, dt * 16);
@@ -896,6 +979,11 @@ function updateHud(hs, t) {
   const chargeK = game.charging ? Math.min(1, (nowS() - game.chargeStart) / C.SPEAR_WINDUP) : 0;
   setText('spear-state', !game.hasSpear ? 'THROWN' : chargeK >= 1 ? 'READY' : game.charging ? 'DRAWING' : 'HELD');
   $('spear-state').classList.toggle('gone', !game.hasSpear);
+  const scanLeft = Math.max(0, game.nextScan - nowS());
+  $('scan-bar').style.width = `${Math.round((1 - scanLeft / C.SCAN_COOLDOWN) * 100)}%`;
+  $('scan-bar').classList.toggle('loading', scanLeft > 0);
+  $('w-scan').classList.toggle('ready', scanLeft <= 0);
+  setText('scan-key', keyName(settings.binds.scan[0]));
   const reloadLeft = Math.max(0, game.nextSling - nowS());
   const bar = $('sling-bar');
   bar.style.width = `${Math.round((1 - reloadLeft / C.SLING_RELOAD) * 100)}%`;
@@ -909,8 +997,7 @@ function updateHud(hs, t) {
     const d = aimDir(game.yaw, game.pitch);
     const wallT = rayMap(eye, d, C.STAB_RANGE, game.map.boxes).t;
     for (const target of hitTargets()) {
-      const hb = playerHitbox(target.p[0], target.p[1], target.p[2], target.crouch, C.STAB_HITBOX_BONUS);
-      if (rayBox(eye, d, hb.min, hb.max, C.STAB_RANGE) < wallT) inReach = true;
+      if (rayTarget(eye, d, C.STAB_RANGE, target, C.STAB_HITBOX_BONUS) < wallT) inReach = true;
     }
   }
   $('crosshair').classList.toggle('stab', inReach);

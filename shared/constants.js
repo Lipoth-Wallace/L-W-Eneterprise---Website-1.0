@@ -11,7 +11,15 @@ export const PLAYER_HEIGHT = 1.8;
 export const CROUCH_HEIGHT = 1.0;
 export const EYE_HEIGHT = 1.6;
 export const CROUCH_EYE_HEIGHT = 0.85;
-export const HITBOX_HALF_WIDTH = 0.48;   // a little more generous than collision
+// Hitboxes hug the fighters' visible envelope in each pose. They turn with
+// the player's facing (model space: -Z is forward, x is half-width). Both skins
+// share one skeleton, and test/hitbox.test.js checks the fit.
+// Collision uses the smaller PLAYER_* sizes above.
+export const HITBOXES = {
+  stand: { half: 0.5, front: -0.72, back: 0.52, height: 1.96 },   // arms forward holding a weapon
+  crouch: { half: 0.5, front: -0.54, back: 0.3, height: 1.52 },
+  slide: { half: 0.5, front: -0.9, back: 0.84, height: 1.44 },    // long and low
+};
 export const STEP_HEIGHT = 0.55;
 
 // Movement: mostly horizontal. Low jump, strong slide, Quake-style air strafing.
@@ -47,6 +55,15 @@ export const SLING_RANGE = 90;
 export const SLING_RELOAD = 1.25;
 export const SPEAR_PICKUP_RADIUS = 1.5;
 export const SPEAR_RETURN_TIME = 15;     // an unreachable spear flies home after this
+
+// Scan (after Hunt: Showdown's Dark Sight): a cone in front of you that
+// reveals fighters through walls for a moment. Darkness is part of the game;
+// the scan is how you cut through it.
+export const SCAN_COOLDOWN = 3.75;
+export const SCAN_RANGE = 60;
+export const SCAN_CONE = 40 * Math.PI / 180;   // half-angle
+export const SCAN_WAVE_TIME = 0.7;             // wavefront takes this long to reach full range
+export const SCAN_REVEAL = 2.2;                // how long a sensed fighter stays highlighted
 
 // Match
 export const KILLS_TO_WIN = 10;

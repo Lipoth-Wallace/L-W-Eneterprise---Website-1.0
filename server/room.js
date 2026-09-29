@@ -2,8 +2,8 @@
 // hits, kills, the spear and the score are decided here.
 
 import * as C from '../shared/constants.js';
-import { MAP } from '../shared/map.js';
-import { rayMap, rayBox, playerHitbox, hitboxBonus, normalize, spearRestPoint } from '../shared/raycast.js';
+import { MAPS } from '../shared/map.js';
+import { rayMap, rayPlayer, poseOf, hitboxBonus, normalize, spearRestPoint } from '../shared/raycast.js';
 
 const HISTORY_SECONDS = 1;
 const MAX_REPORTED_SPEED = C.MAX_SPEED * 1.35 + 4;   // generous: jitter bunches packets up
@@ -11,8 +11,9 @@ const MAX_REPORTED_SPEED = C.MAX_SPEED * 1.35 + 4;   // generous: jitter bunches
 let nextPlayerId = 1;
 
 export class Room {
-  constructor(code, { isPrivate = false, now = () => performance.now() / 1000 } = {}) {
+  constructor(code, { isPrivate = false, map = 'kiln', now = () => performance.now() / 1000 } = {}) {
     this.code = code;
+    this.map = MAPS[map] && map !== 'range' ? MAPS[map] : MAPS.kiln;
     this.isPrivate = isPrivate;
     this.now = now;
     this.players = new Map();       // id -> player
@@ -42,13 +43,13 @@ export class Room {
       lastStateAt: 0,
       history: [],
       nextStab: 0, nextThrow: 0, nextSling: 0,
-      charging: false, chargeAt: 0,
+      charging: false, chargeAt: 0, nextScan: 0,
       spear: { state: 'held', p: [0, 0, 0], dir: [0, 0, -1], landedAt: 0 },
       spawnSeq: 0,
     };
     this.players.set(id, p);
+    send({ t: 'welcome', id, room: this.code, isPrivate: this.isPrivate, killsToWin: C.KILLS_TO_WIN, map: this.map.id });
     this.spawn(p);
-    send({ t: 'welcome', id, room: this.code, isPrivate: this.isPrivate, killsToWin: C.KILLS_TO_WIN });
     this.pushEvent({ e: 'join', id, name: p.name });
     return p;
   }
@@ -73,8 +74,8 @@ export class Room {
 
   spawn(p) {
     const foe = this.opponentOf(p);
-    let best = MAP.spawns[0], bestD = -1;
-    for (const sp of MAP.spawns) {
+    let best = this.map.spawns[0], bestD = -1;
+    for (const sp of this.map.spawns) {
       const d = foe && foe.alive ? Math.hypot(sp.p[0] - foe.x, sp.p[2] - foe.z) : Math.random() * 100;
       if (d > bestD) { bestD = d; best = sp; }
     }
@@ -96,21 +97,28 @@ export class Room {
   }
 
   record(p, t) {
-    p.history.push({ t, x: p.x, y: p.y, z: p.z, crouching: p.crouching });
+    p.history.push({ t, x: p.x, y: p.y, z: p.z, yaw: p.yaw, crouching: p.crouching, sliding: p.sliding });
     while (p.history.length > 2 && p.history[0].t < t - HISTORY_SECONDS) p.history.shift();
   }
 
   // Where p was at time t (linear between recorded states).
   positionAt(p, t) {
     const h = p.history;
-    if (!h.length) return { x: p.x, y: p.y, z: p.z, crouching: p.crouching };
+    if (!h.length) return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, crouching: p.crouching, sliding: p.sliding };
     if (t <= h[0].t) return h[0];
     for (let i = h.length - 1; i >= 0; i--) {
       if (h[i].t <= t) {
         const a = h[i], b = h[i + 1];
         if (!b) return a;
         const k = (t - a.t) / (b.t - a.t || 1);
-        return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, crouching: k < 0.5 ? a.crouching : b.crouching };
+        const near = k < 0.5 ? a : b;
+        let dyaw = b.yaw - a.yaw;
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        return {
+          x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k,
+          yaw: a.yaw + dyaw * k, crouching: near.crouching, sliding: near.sliding,
+        };
       }
     }
     return h[h.length - 1];
@@ -123,8 +131,8 @@ export class Room {
     if (![x, y, z].every(Number.isFinite)) return;
     const dt = Math.max(t - p.lastStateAt, 1 / C.STATE_RATE);
     const dist = Math.hypot(x - p.x, z - p.z);
-    const lim = Math.abs(MAP.halfSize) + 1;
-    if (dist > MAX_REPORTED_SPEED * dt + 1.5 || Math.abs(x) > lim || Math.abs(z) > lim || y < -1 || y > MAP.ceiling) {
+    const lim = this.map.halfSize + 1;
+    if (dist > MAX_REPORTED_SPEED * dt + 1.5 || Math.abs(x) > lim || Math.abs(z) > lim || y < -1 || y > this.map.ceiling) {
       // Too far, too fast: snap the client back to the last position we accepted.
       p.send({ t: 'correct', p: [p.x, p.y, p.z], seq: p.spawnSeq });
       return;
@@ -148,6 +156,20 @@ export class Room {
     const on = !!m.on;
     if (on && !p.charging) p.chargeAt = this.now();
     p.charging = on;
+  }
+
+  // A scan is sensed on the scanner's own screen (the client already knows
+  // where everyone is). The server enforces the cooldown and tells the
+  // opponent, who sees the eyes fly out from the scanner.
+  handleScan(p, m) {
+    const t = this.now();
+    if (!p.alive || t < p.nextScan - 0.05) return;
+    const o = (m.o || []).map(Number);
+    const d = (m.d || []).map(Number);
+    if (o.length !== 3 || d.length !== 3 || ![...o, ...d].every(Number.isFinite)) return;
+    if (Math.hypot(o[0] - p.x, o[2] - p.z) > 2) return;
+    p.nextScan = t + C.SCAN_COOLDOWN;
+    this.pushEvent({ e: 'scan', id: p.id, o, d: normalize(d) });
   }
 
   // weapon: 'stab' | 'throw' | 'sling'. The origin is the shooter's eye as the
@@ -175,21 +197,20 @@ export class Room {
     p.protectedUntil = 0;   // attacking ends spawn protection
 
     const range = kind === 'stab' ? C.STAB_RANGE : kind === 'throw' ? C.THROW_RANGE : C.SLING_RANGE;
-    const wall = rayMap(o, d, range);
+    const wall = rayMap(o, d, range, this.map.boxes);
     const foe = this.opponentOf(p);
     let hitFoe = false, foeT = Infinity;
     if (foe && foe.alive && t >= foe.protectedUntil) {
       const rewind = Math.max(t - C.LAG_COMP_MAX, Math.min(t, +m.time || t));
       const pose = this.positionAt(foe, rewind);
-      const hb = playerHitbox(pose.x, pose.y, pose.z, pose.crouching, hitboxBonus(kind));
-      foeT = rayBox(o, d, hb.min, hb.max, range);
+      foeT = rayPlayer(o, d, range, pose, poseOf(pose.crouching, pose.sliding), hitboxBonus(kind));
       hitFoe = foeT < wall.t;
     }
     const endT = hitFoe ? foeT : Math.min(wall.t, range);
     const end = [o[0] + d[0] * endT, o[1] + d[1] * endT, o[2] + d[2] * endT];
 
     if (kind === 'throw') {
-      const rest = hitFoe ? spearRestPoint([foe.x, foe.y + 0.2, foe.z], [0, 1, 0]) : spearRestPoint(end, wall.normal);
+      const rest = hitFoe ? spearRestPoint([foe.x, foe.y + 0.2, foe.z], [0, 1, 0], this.map.boxes) : spearRestPoint(end, wall.normal, this.map.boxes);
       p.spear = { state: 'ground', p: rest, dir: [d[0], 0, d[2]], landedAt: t };
       if (p.weapon === 'spear') p.weapon = 'sling';
     }

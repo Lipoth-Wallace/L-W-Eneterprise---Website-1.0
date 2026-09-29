@@ -207,3 +207,31 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
   .bind-row { grid-template-columns: 1fr 90px 90px; }
   .settings-box .field.row span { width: 100px; }
 }
+
+/* ---------- Scan ---------- */
+#scan-eyes {
+  position: absolute; left: 50%; top: 50%; width: 120px; height: 40px; margin: -20px 0 0 -60px;
+  background-size: contain; background-repeat: no-repeat; opacity: 0; pointer-events: none;
+  filter: drop-shadow(0 0 6px #ff9a2a);
+}
+/* Exponential growth: the ease-in curve keeps it small, then it explodes outward */
+#scan-eyes.go { animation: scan-eyes 0.7s cubic-bezier(0.8, 0, 1, 0.6) forwards; }
+@keyframes scan-eyes {
+  0% { transform: scale(0.4); opacity: 1; }
+  70% { opacity: 0.9; }
+  100% { transform: scale(14); opacity: 0; }
+}
+.weapon.scan .bar i { background: #ffb03a; }
+.weapon.scan .bar i.loading { background: #6a4a20; }
+.weapon.scan.ready { border-color: #ffb03a; opacity: 1; }
+
+/* ---------- Inside a bush ---------- */
+#bush-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(8, 16, 6, 0.55) 62%, rgba(4, 10, 3, 0.92) 100%),
+    repeating-conic-gradient(from 10deg at 50% 50%, rgba(10, 24, 8, 0.0) 0deg 9deg, rgba(10, 24, 8, 0.35) 9deg 14deg);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, transparent 30%, #000 70%);
+  mask-image: radial-gradient(ellipse at 50% 50%, transparent 30%, #000 70%);
+}
+.arena select { flex: 1; }

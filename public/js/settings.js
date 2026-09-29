@@ -17,6 +17,7 @@ export const ACTIONS = [
   { id: 'attack', label: 'Stab / sling shot', def: ['Mouse0', null] },
   { id: 'throw', label: 'Charge & throw spear', def: ['Mouse2', null] },
   { id: 'quickStab', label: 'Quick stab', def: ['KeyF', null] },
+  { id: 'scan', label: 'Scan (sense enemies)', def: ['KeyE', null] },
   { id: 'swap', label: 'Swap weapon', def: ['KeyQ', null] },
   { id: 'spear', label: 'Equip spear', def: ['Digit1', null] },
   { id: 'sling', label: 'Equip sling', def: ['Digit2', null] },
@@ -43,8 +44,9 @@ const DEFAULTS = {
   autoSprint: false,
   chain: true,             // gold chain in first person
   musicTrack: 'shuffle',   // a TRACKS index or 'shuffle'
+  map: 'random',           // arena for rooms you create: an ARENAS id or 'random'
   binds: Object.fromEntries(ACTIONS.map((a) => [a.id, [...a.def]])),
-  volumes: { master: 0.7, weapons: 1, hits: 1, movement: 0.8, ambience: 0.6, ui: 0.8, music: 0.6 },
+  volumes: { master: 0.7, weapons: 1, hits: 1, movement: 0.8, ambience: 0.45, ui: 0.8, music: 0.6 },
 };
 
 function load(key, fallback) {

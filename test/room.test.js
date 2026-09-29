@@ -145,6 +145,19 @@ test('a throw before the windup finishes is ignored', () => {
   assert.equal(a.charging, false);
 });
 
+test('scans are relayed to the opponent and rate-limited by the cooldown', () => {
+  const { room, a, advance } = setup();
+  place(room, a, [-20, 0, -26], advance);
+  room.snapshot();
+  const scan = { o: [-20, 1.6, -26], d: [1, 0, 0] };
+  room.handleScan(a, scan);
+  room.handleScan(a, scan);                 // spammed: ignored
+  assert.equal(room.snapshot().ev.filter((e) => e.e === 'scan').length, 1);
+  advance(C.SCAN_COOLDOWN);
+  room.handleScan(a, scan);
+  assert.equal(room.snapshot().ev.filter((e) => e.e === 'scan').length, 1);
+});
+
 test('an unreachable spear flies home after SPEAR_RETURN_TIME', () => {
   const { room, a, advance } = setup();
   place(room, a, [0, 0, -26], advance);

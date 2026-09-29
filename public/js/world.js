@@ -47,13 +47,15 @@ export function buildWorld(scene, map) {
     floor: new THREE.MeshLambertMaterial({ map: tex.floor, color: 0x9a8a84 }),
     course: new THREE.MeshLambertMaterial({ map: tex.concrete, color: 0xc8bcb4 }),
     blood: new THREE.MeshLambertMaterial({ map: tex.rock, color: 0x6a0a06, emissive: 0x4a0402 }),
+    grass: new THREE.MeshLambertMaterial({ map: tex.grass, color: 0xb0a098 }),
+    wood: new THREE.MeshLambertMaterial({ map: tex.bark, color: 0xa08a80 }),
   };
 
   scene.add(new THREE.AmbientLight(0x4a1c16, 2.2));
   let sky = null;
   if (map.sky) {
     sky = addSky(scene);
-    scene.fog = new THREE.FogExp2(0x3a0e0a, 0.012);
+    scene.fog = map.fog ? new THREE.FogExp2(map.fog.color, map.fog.density) : new THREE.FogExp2(0x3a0e0a, 0.012);
     // Dim red moonlight: long shadows are too expensive, but a key light from
     // the moon's side keeps silhouettes readable.
     scene.add(new THREE.HemisphereLight(0x8a5048, 0x180808, 1.3));
@@ -68,6 +70,7 @@ export function buildWorld(scene, map) {
   }
 
   for (const b of map.boxes) {
+    if (b.mat === 'trunk') continue;   // drawn as round trees in addThicketDecor
     const sx = b.max[0] - b.min[0], sy = b.max[1] - b.min[1], sz = b.max[2] - b.min[2];
     const isRock = b.mat === 'rock';
     const seg = (n) => (isRock ? Math.max(1, Math.round(n / 1.2)) : 1);
@@ -84,7 +87,9 @@ export function buildWorld(scene, map) {
   const glowMat = new THREE.MeshBasicMaterial({ color: 0xff2a14 });
   const glowDim = new THREE.MeshBasicMaterial({ color: 0x8a0e06 });
 
+  let extras = {};
   if (map.id === 'kiln') addKilnDecor(scene, map, glowMat, glowDim);
+  else if (map.id === 'thicket') extras = addThicketDecor(scene, map);
   else addQuarryDecor(scene, map, glowMat, glowDim);
 
   // Lights
@@ -114,8 +119,10 @@ export function buildWorld(scene, map) {
   }
 
   return {
+    bushes: extras.bushes || [],
     update(t, camera) {
       if (sky && camera) sky.position.copy(camera.position);
+      if (extras.update) extras.update(t);
       for (const f of flickers) {
         f.light.intensity = f.base * (0.75 + 0.25 * Math.sin(t * 13 + f.phase) * Math.sin(t * 7.3 + f.phase * 2));
       }
@@ -347,4 +354,105 @@ function addQuarryDecor(scene, map, glowMat, glowDim) {
     post.position.set(sign.p[0], sign.p[1] + 1.15, sign.p[2] + 0.1 * Math.cos(sign.yaw || 0));
     scene.add(post);
   }
+}
+
+// ---------------------------------------------------------------- the Thicket
+
+function addThicketDecor(scene, map) {
+  const tex = getTextures();
+  const rand = seeded(77);
+  const barkMat = new THREE.MeshLambertMaterial({ map: tex.bark, color: 0x9a8078, flatShading: true });
+  const canopyMat = new THREE.MeshLambertMaterial({ map: tex.leaves, color: 0x6a7a60, flatShading: true });
+
+  // Trees: a round trunk (the collision box is its square footprint) and a
+  // stacked-cone canopy high enough to leave sightlines at head height.
+  for (const t of map.trees) {
+    const [x, z] = t.p;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(t.r * 0.85, t.r * 1.25, 14, 6), barkMat);
+    trunk.position.set(x, 7, z);
+    scene.add(trunk);
+    const tiers = 3 + Math.floor(rand() * 2);
+    for (let i = 0; i < tiers; i++) {
+      const r = 3.2 - i * 0.65 + rand() * 0.5, h = 3.2;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 6), canopyMat);
+      cone.position.set(x + (rand() - 0.5) * 0.4, 5.2 + i * 2.1, z + (rand() - 0.5) * 0.4);
+      cone.rotation.y = rand() * 3;
+      scene.add(cone);
+    }
+  }
+
+  // Bushes: a dense dome of leafy blobs. The inside is hollow, so you can
+  // stand in one, and the blobs overlap enough that nothing shows through
+  // from outside. Each bush has its own material so the one you're standing
+  // in can fade out for you alone.
+  const bushes = [];
+  for (const b of map.bushes) {
+    const mat = new THREE.MeshLambertMaterial({ map: tex.leaves, color: 0x6a7c58, emissive: 0x0c1408, flatShading: true, transparent: true, opacity: 1 });
+    const group = new THREE.Group();
+    group.position.set(b.p[0], 0, b.p[1]);
+    const ring = (count, radius, y, size) => {
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2 + rand() * 0.3;
+        const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(size * (0.85 + rand() * 0.3), 0), mat);
+        blob.position.set(Math.cos(a) * radius, y + (rand() - 0.5) * 0.2, Math.sin(a) * radius);
+        blob.rotation.set(rand() * 3, rand() * 3, 0);
+        group.add(blob);
+      }
+    };
+    ring(11, b.r, 0.55, 0.75);
+    ring(10, b.r * 0.92, 1.35, 0.72);
+    ring(6, b.r * 0.55, b.h - 0.15, 0.7);
+    const cap = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), mat);
+    cap.position.y = b.h + 0.1;
+    group.add(cap);
+    scene.add(group);
+    bushes.push({ ...b, mat, group });
+  }
+
+  // Ground scatter: ferns and a few glowing mushrooms
+  const fernMat = new THREE.MeshLambertMaterial({ color: 0x2c3a22, flatShading: true });
+  const shroomMat = new THREE.MeshBasicMaterial({ color: 0xff3a1a });
+  const W = map.halfSize - 2;
+  for (let i = 0; i < 140; i++) {
+    const x = (rand() * 2 - 1) * W, z = (rand() * 2 - 1) * W;
+    const fern = new THREE.Mesh(new THREE.ConeGeometry(0.35 + rand() * 0.3, 0.4 + rand() * 0.4, 4), fernMat);
+    fern.position.set(x, 0.25, z);
+    fern.rotation.y = rand() * 3;
+    scene.add(fern);
+    if (i % 7 === 0) {
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.07, 5), shroomMat);
+      cap.position.set(x + 0.4, 0.14, z + 0.2);
+      scene.add(cap);
+    }
+  }
+
+  // Fireflies: slow drifting specks that pulse
+  const n = 160;
+  const base = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    base[i * 3] = (rand() * 2 - 1) * W;
+    base[i * 3 + 1] = 0.5 + rand() * 3;
+    base[i * 3 + 2] = (rand() * 2 - 1) * W;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(base.slice(), 3));
+  const flyMat = new THREE.PointsMaterial({ color: 0xd8e070, size: 0.09, transparent: true, opacity: 0.8, depthWrite: false });
+  const flies = new THREE.Points(g, flyMat);
+  flies.frustumCulled = false;
+  scene.add(flies);
+
+  return {
+    bushes,
+    update(t) {
+      const pos = g.attributes.position;
+      for (let i = 0; i < n; i++) {
+        pos.setXYZ(i,
+          base[i * 3] + Math.sin(t * 0.3 + i) * 1.2,
+          base[i * 3 + 1] + Math.sin(t * 0.7 + i * 1.3) * 0.4,
+          base[i * 3 + 2] + Math.cos(t * 0.25 + i * 0.7) * 1.2);
+      }
+      pos.needsUpdate = true;
+      flyMat.opacity = 0.55 + 0.35 * Math.sin(t * 2.3);
+    },
+  };
 }

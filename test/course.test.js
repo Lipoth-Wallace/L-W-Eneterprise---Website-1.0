@@ -81,7 +81,7 @@ test('targets stand on solid ground and are not buried in geometry', () => {
     for (let i = 0; i < 30; i++) stepPlayer(s, { yaw: 0, pitch: 0, crouch: s.crouching }, DT, B);
     assert.ok(s.onGround && Math.abs(s.y - b.p[1]) < 0.06, `${b.label} y=${s.y}`);
     assert.ok(Math.hypot(s.x - b.p[0], s.z - b.p[2]) < 0.01, `${b.label} was pushed out of geometry`);
-    const hb = playerHitbox(b.p[0], b.p[1], b.p[2], b.pose !== 'stand');
+    const hb = playerHitbox(b.pose);
     assert.ok(hb.max[1] > hb.min[1]);
   }
 });

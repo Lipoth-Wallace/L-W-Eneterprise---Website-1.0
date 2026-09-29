@@ -81,6 +81,10 @@ export function setupMenu({ onStart }) {
   name.value = settings.name;
   name.addEventListener('input', () => { settings.name = name.value; saveSettings('general'); });
 
+  const arena = $('arena');
+  arena.value = settings.map;
+  arena.addEventListener('change', () => { settings.map = arena.value; saveSettings('general'); });
+
   const code = $('code');
   const urlRoom = new URLSearchParams(location.search).get('room');
   if (urlRoom) code.value = urlRoom.toUpperCase();

@@ -45,11 +45,31 @@ export function rayMap(o, d, maxDist, boxes = MAP.boxes) {
   return best;
 }
 
-/** Hitbox for a player standing at (x, y, z) with feet at y. */
-export function playerHitbox(x, y, z, crouching, bonus = 0) {
-  const r = C.HITBOX_HALF_WIDTH + bonus;
-  const h = (crouching ? C.CROUCH_HEIGHT : C.PLAYER_HEIGHT) + 0.1;
-  return { min: [x - r, y - bonus * 0.5, z - r], max: [x + r, y + h + bonus * 0.5, z + r] };
+/** A player's hitbox in model space (feet at the origin, facing -Z). */
+export function playerHitbox(pose = 'stand', bonus = 0) {
+  const b = C.HITBOXES[pose] || C.HITBOXES.stand;
+  return {
+    min: [-b.half - bonus, -bonus * 0.5, b.front - bonus],
+    max: [b.half + bonus, b.height + bonus * 0.5, b.back + bonus],
+  };
+}
+
+export function poseOf(crouching, sliding) {
+  return sliding ? 'slide' : crouching ? 'crouch' : 'stand';
+}
+
+/**
+ * Ray against a player's hitbox, which turns with their yaw. The ray is moved
+ * into the player's model space, where the box is axis-aligned. Returns the
+ * hit distance or Infinity.
+ */
+export function rayPlayer(o, d, maxDist, target, pose = 'stand', bonus = 0) {
+  const c = Math.cos(-(target.yaw || 0)), s = Math.sin(-(target.yaw || 0));
+  const ox = o[0] - target.x, oz = o[2] - target.z;
+  const lo = [ox * c + oz * s, o[1] - target.y, -ox * s + oz * c];
+  const ld = [d[0] * c + d[2] * s, d[1], -d[0] * s + d[2] * c];
+  const hb = playerHitbox(pose, bonus);
+  return rayBox(lo, ld, hb.min, hb.max, maxDist);
 }
 
 // Extra hitbox size per weapon: the sling needs a clean hit, the thrown spear
