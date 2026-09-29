@@ -66,8 +66,9 @@ Showdown's Dark Sight:
   60 m). Any fighter it reaches shows up **through walls and foliage** for
   about 2 seconds as a sliced amber ghost of their own body. It keeps their
   build, but it's cut into thin flickering slices that drop out and shear
-  sideways. A wisp of mist streams out behind a moving fighter, so you can
-  read which way they're heading.
+  sideways, and a churning amber shroud rides along with them to blur the
+  head and edges. A moving fighter also drags a mist trail behind them that
+  points back the way they came, so you can read their direction.
 - **The catch:** your opponent sees your eyes fly out from where you're
   standing, and hears a whisper from your direction. Scanning gives away your
   position.
