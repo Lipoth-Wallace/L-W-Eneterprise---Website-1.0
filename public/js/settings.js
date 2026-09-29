@@ -86,7 +86,7 @@ export function actionsFor(code) {
 
 export function keyName(code) {
   if (!code) return '—';
-  const mouse = { Mouse0: 'MOUSE 1', Mouse1: 'MOUSE 3', Mouse2: 'MOUSE 2', Mouse3: 'MOUSE 4', Mouse4: 'MOUSE 5' };
+  const mouse = { Mouse0: 'MOUSE 1', Mouse1: 'MOUSE 3', Mouse2: 'MOUSE 2', Mouse3: 'MOUSE 4', Mouse4: 'MOUSE 5', WheelUp: 'WHEEL ↑', WheelDown: 'WHEEL ↓' };
   if (mouse[code]) return mouse[code];
   const named = {
     Space: 'SPACE', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT',
@@ -201,6 +201,12 @@ export function setupSettingsPanel({ onPreview } = {}) {
     e.stopImmediatePropagation();
     finishCapture(`Mouse${e.button}`);
   }, true);
+  addEventListener('wheel', (e) => {
+    if (!capture || !e.deltaY) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    finishCapture(e.deltaY > 0 ? 'WheelDown' : 'WheelUp');
+  }, { capture: true, passive: false });
   addEventListener('contextmenu', (e) => { if (document.body.classList.contains('capturing') || !modal.hidden) e.preventDefault(); }, true);
   $('binds-reset').addEventListener('click', () => {
     settings.binds = structuredClone(DEFAULTS.binds);

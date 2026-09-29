@@ -4,10 +4,16 @@
 // Feel targets (Straftat / ULTRAKILL):
 //   - A slide sets you to at least SLIDE_SPEED and barely slows down.
 //   - Jumping out of a slide keeps that speed and adds a little.
-//   - Landing with crouch held drops you straight back into a slide.
-//   - Holding jump re-jumps the instant you land, with no friction tick
-//     (bunny hopping).
+//   - Movement rewards timing, not holding keys (Straftat-style):
+//     - Bunny hopping: press jump just before (or just after) you land and
+//       you keep all your speed. Holding jump only jumps once; miss the
+//       window and ground friction starts eating your speed.
+//     - The slide boost needs a fresh crouch press. Press it in the air and
+//       you land straight into a boosted slide. Holding crouch through a
+//       landing still slides, but without the boost.
 //   - Air strafing gains speed like Quake: a low wish-speed cap with high accel.
+//   - Air control: forward alone steers your velocity toward your view,
+//     without adding speed.
 
 import * as C from './constants.js';
 import { MAP } from './map.js';
@@ -25,6 +31,9 @@ export function createPlayerState(p = [0, 0, 0], yaw = 0) {
     jumpBuffer: 0,
     coyote: 0,
     crouchHeldPrev: false,
+    jumpHeldPrev: false,
+    slideQueued: false,     // crouch pressed in the air: slide (boosted) on landing
+    groundTime: 0,
   };
 }
 
@@ -140,6 +149,21 @@ function accelerate(s, wx, wz, wishSpeed, accel, dt) {
   s.vz += wz * amount;
 }
 
+// Rotates horizontal velocity toward (wx, wz) at up to AIR_TURN_RATE,
+// keeping its length. Never flips you round: only within 90 degrees.
+function airSteer(s, wx, wz, dt) {
+  const v = Math.hypot(s.vx, s.vz);
+  if (v < 1) return;
+  const cur = Math.atan2(s.vz, s.vx);
+  let diff = Math.atan2(wz, wx) - cur;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  if (Math.abs(diff) > Math.PI / 2) return;
+  const turn = Math.sign(diff) * Math.min(Math.abs(diff), C.AIR_TURN_RATE * dt);
+  s.vx = Math.cos(cur + turn) * v;
+  s.vz = Math.sin(cur + turn) * v;
+}
+
 function applyFriction(s, friction, dt) {
   const speed = Math.hypot(s.vx, s.vz);
   if (speed < 1e-4) { s.vx = s.vz = 0; return; }
@@ -149,13 +173,13 @@ function applyFriction(s, friction, dt) {
   s.vz *= scale;
 }
 
-function startSlide(s, wx, wz, hasWish) {
+function startSlide(s, wx, wz, hasWish, boost) {
   let speed = Math.hypot(s.vx, s.vz);
   let dx, dz;
   if (speed > 1) { dx = s.vx / speed; dz = s.vz / speed; }
   else if (hasWish) { dx = wx; dz = wz; }
   else return;
-  if (s.slideCooldown <= 0) {
+  if (boost && s.slideCooldown <= 0) {
     speed = Math.max(speed, C.SLIDE_SPEED * (s.speedMult || 1));
     s.slideCooldown = C.SLIDE_REBOOST_COOLDOWN;
   }
@@ -178,6 +202,12 @@ function startSlide(s, wx, wz, hasWish) {
  */
 export function stepPlayer(s, input, dt, boxes = MAP.boxes, pads = null) {
   s.speedMult = input.speedMult || 1;
+  // Presses are edges, found once per frame: holding a key isn't pressing it
+  const jumpPressed = !!input.jump && !s.jumpHeldPrev;
+  const crouchPressed = !!input.crouch && !s.crouchHeldPrev;
+  if (jumpPressed) s.jumpBuffer = C.JUMP_BUFFER;
+  if (crouchPressed) s.slideQueued = true;
+  if (!input.crouch) s.slideQueued = false;
   // Sub-step so nothing moves further than ~0.2 m per step, which keeps thin
   // boxes from being tunnelled through at top speed.
   const steps = Math.max(1, Math.ceil((Math.hypot(s.vx, s.vy, s.vz) * dt) / 0.2));
@@ -188,8 +218,10 @@ export function stepPlayer(s, input, dt, boxes = MAP.boxes, pads = null) {
     events.landed ||= e.landed;
     events.slid ||= e.slid;
     events.launched ||= e.launched;
+    events.perfect ||= e.perfect;
   }
   s.crouchHeldPrev = !!input.crouch;
+  s.jumpHeldPrev = !!input.jump;
   return events;
 }
 
@@ -198,7 +230,7 @@ function substep(s, input, dt, boxes, pads) {
   s.yaw = input.yaw;
   s.pitch = input.pitch;
   s.slideCooldown = Math.max(0, s.slideCooldown - dt);
-  s.jumpBuffer = input.jump ? C.JUMP_BUFFER : Math.max(0, s.jumpBuffer - dt);
+  s.jumpBuffer = Math.max(0, s.jumpBuffer - dt);
 
   // Wish direction on the ground plane. Yaw 0 looks down -Z.
   const sin = Math.sin(s.yaw), cos = Math.cos(s.yaw);
@@ -216,9 +248,11 @@ function substep(s, input, dt, boxes, pads) {
   }
   if (!input.crouch) s.sliding = false;
 
-  if (s.onGround && input.crouch && !s.sliding &&
-      (!s.crouchHeldPrev || s.justLanded)) {
-    startSlide(s, wx, wz, hasWish);
+  // A fresh crouch press (on the ground, or queued in the air) starts a
+  // boosted slide; landing with crouch merely held slides without the boost
+  if (s.onGround && input.crouch && !s.sliding && (s.slideQueued || s.justLanded)) {
+    startSlide(s, wx, wz, hasWish, s.slideQueued);
+    s.slideQueued = false;
     if (s.sliding) events.slid = true;
   }
   s.justLanded = false;
@@ -239,7 +273,9 @@ function substep(s, input, dt, boxes, pads) {
         if (ns < C.SLIDE_MIN_SPEED) s.sliding = false;
       }
     } else {
-      if (!wantJump) applyFriction(s, C.FRICTION, dt);
+      // A short grace after touching down: a jump pressed just late still
+      // counts as a perfect hop
+      if (!wantJump && s.groundTime >= C.BHOP_GRACE) applyFriction(s, C.FRICTION, dt);
       if (hasWish) {
         const top = (s.crouching ? C.CROUCH_SPEED : input.sprint ? C.RUN_SPEED : C.WALK_SPEED) * s.speedMult;
         accelerate(s, wx, wz, top, C.GROUND_ACCEL / C.RUN_SPEED, dt);
@@ -248,9 +284,13 @@ function substep(s, input, dt, boxes, pads) {
   } else {
     s.coyote = Math.max(0, s.coyote - dt);
     if (hasWish) accelerate(s, wx, wz, C.AIR_WISH_CAP, C.AIR_ACCEL / C.AIR_WISH_CAP, dt);
+    // Air control: forward or back alone turns you toward where you look
+    if (hasWish && !input.strafe) airSteer(s, wx, wz, dt);
   }
 
   if (wantJump) {
+    // A perfect hop: off the ground again inside the grace, still moving fast
+    if (s.onGround && s.groundTime < C.BHOP_GRACE && Math.hypot(s.vx, s.vz) > C.RUN_SPEED) events.perfect = true;
     s.vy = C.JUMP_SPEED;
     if (s.sliding) {
       s.vx *= C.SLIDE_JUMP_MULT;
@@ -290,6 +330,7 @@ function substep(s, input, dt, boxes, pads) {
     }
   }
   s.onGround = landed;
+  s.groundTime = landed ? (wasOnGround ? s.groundTime + dt : 0) : 0;
   if (landed) s.padFlight = false;
   if (s.onGround && !wasOnGround) {
     s.justLanded = true;

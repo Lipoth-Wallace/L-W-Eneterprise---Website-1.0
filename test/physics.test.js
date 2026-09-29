@@ -58,13 +58,41 @@ test('slide-jump chain keeps speed well above running', () => {
   assert.ok(hspeed(s) <= C.MAX_SPEED + 1e-6);
 });
 
-test('holding jump bunny hops without a friction tick', () => {
+// Taps jump for one frame whenever `when` says so (a player timing hops)
+function hopBot(s, seconds, when, extra = () => ({})) {
+  let jumps = 0, prev = false;
+  for (let i = 0; i < Math.round(seconds / DT); i++) {
+    const tap = !prev && when(s, i);
+    prev = tap;
+    const e = stepPlayer(s, { yaw: 0, pitch: 0, ...extra(i), jump: tap }, DT, flat);
+    if (e.jumped) jumps++;
+  }
+  return jumps;
+}
+
+test('holding jump only jumps once: bunny hops need a press each time', () => {
   const s = createPlayerState([0, 0, 0]);
   run(s, {}, 0.2);
-  s.vx = 0; s.vz = -14;
-  const ev = run(s, { jump: true }, 1.2);
-  assert.ok(ev.filter((e) => e.jumped).length >= 2, 'jumped more than once');
-  assert.ok(hspeed(s) > 13, `speed=${hspeed(s)}`);
+  const ev = run(s, { jump: true }, 1.5);
+  assert.equal(ev.filter((e) => e.jumped).length, 1);
+});
+
+test('a hop timed at landing keeps all your speed; a late one loses it', () => {
+  const timed = createPlayerState([0, 0, 0]);
+  run(timed, {}, 0.2);
+  timed.vx = 0; timed.vz = -14;
+  // Press just before touching down (falling, feet within 5 cm of the floor)
+  const n = hopBot(timed, 2, (st) => st.onGround || (st.vy < 0 && st.y < 0.05));
+  assert.ok(n >= 3, `hops=${n}`);
+  assert.ok(hspeed(timed) > 13.5, `timed speed=${hspeed(timed)}`);
+
+  const late = createPlayerState([0, 0, 0]);
+  run(late, {}, 0.2);
+  late.vx = 0; late.vz = -14;
+  // Press 0.15 s after landing, every time
+  let groundFor = 0;
+  hopBot(late, 2, (st) => { groundFor = st.onGround ? groundFor + DT : 0; return groundFor > 0.15; });
+  assert.ok(hspeed(late) < 9, `late speed=${hspeed(late)}`);
 });
 
 test('air strafing gains speed', () => {
@@ -73,14 +101,50 @@ test('air strafing gains speed', () => {
   s.vx = 0; s.vz = -10;
   let yaw = 0;
   const start = hspeed(s);
-  // Turn while holding strafe: the classic curve
-  for (let hop = 0; hop < 4; hop++) {
-    for (let i = 0; i < 90; i++) {
-      yaw -= 0.02;
-      stepPlayer(s, { strafe: 1, jump: true, yaw, pitch: 0 }, DT, flat);
-    }
+  // Turn while holding strafe, tapping jump on each landing: the classic curve
+  let prev = false;
+  for (let i = 0; i < 360; i++) {
+    yaw -= 0.02;
+    const tap = !prev && s.onGround;
+    prev = tap;
+    stepPlayer(s, { strafe: 1, jump: tap, yaw, pitch: 0 }, DT, flat);
   }
   assert.ok(hspeed(s) > start + 1, `start=${start} end=${hspeed(s)}`);
+});
+
+test('air control: forward alone turns you toward your view without adding speed', () => {
+  const s = createPlayerState([0, 0, 0]);
+  run(s, {}, 0.2);
+  s.vx = 0; s.vz = -12;
+  run(s, { jump: true }, 1 / 60);
+  // Look 60 degrees right (yaw -pi/3) and hold forward for 0.3 s of air
+  const yaw = -Math.PI / 3;
+  for (let i = 0; i < 36; i++) stepPlayer(s, { fwd: 1, yaw, pitch: 0 }, DT, flat);
+  const heading = Math.atan2(s.vx, -s.vz);   // 0 = -Z, positive = toward +X
+  assert.ok(heading > 0.5 && heading < Math.PI / 3 + 1e-6, `heading=${heading}`);
+  assert.ok(hspeed(s) <= 12 + 0.3, `speed=${hspeed(s)}`);
+});
+
+test('the slide boost needs a fresh crouch press; holding crouch through a landing gives none', () => {
+  // Held from before the jump: slides on landing, no boost
+  const held = createPlayerState([0, 0, 0]);
+  run(held, {}, 0.2);
+  run(held, { fwd: 1, sprint: true }, 1);
+  run(held, { fwd: 1, sprint: true, crouch: true }, 0.8);   // boosted slide, then it cools down
+  const before = hspeed(held);
+  run(held, { fwd: 1, crouch: true, jump: true }, 1 / 60);
+  run(held, { fwd: 1, crouch: true }, 0.75);
+  assert.ok(hspeed(held) <= before + 0.5, `held: ${before} -> ${hspeed(held)}`);
+
+  // Pressed in the air: lands straight into a boosted slide
+  const tapped = createPlayerState([0, 0, 0]);
+  run(tapped, {}, 0.2);
+  run(tapped, { fwd: 1, sprint: true }, 1);
+  run(tapped, { fwd: 1, sprint: true, jump: true }, 1 / 60);
+  run(tapped, { fwd: 1, sprint: true }, 0.3);
+  const ev = run(tapped, { fwd: 1, crouch: true }, 0.4);
+  assert.ok(ev.some((e) => e.slid));
+  assert.ok(hspeed(tapped) > C.RUN_SPEED + 3, `tapped speed=${hspeed(tapped)}`);
 });
 
 test('jump apex clears waist-high cover but not the 2 m ledge', () => {

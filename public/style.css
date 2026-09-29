@@ -134,6 +134,7 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
 #speed small { font-size: 10px; color: var(--dim); }
 #speed.fast b { color: var(--ember); }
 #speed.faster b { color: var(--blood); }
+#speed.perfect b { color: #ffd070; }
 
 #weapons { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
 .weapon { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 2px solid var(--line); padding: 6px 10px; min-width: 200px; opacity: 0.55; }

@@ -29,7 +29,7 @@ Default controls (all rebindable under **Settings → Controls**):
 | `WASD` | Move (walk) |
 | `Shift` | Sprint. With **Auto sprint** on you always run, and Shift walks. |
 | `Ctrl` / `C` | Slide (crouch while moving) |
-| `Space` | Jump (hold to bunny hop) |
+| `Space` | Jump. Tap it as you land to bunny hop (bind the mouse wheel to jump for easier timing) |
 | `LMB` | Stab (spear out) or sling shot (sling out) |
 | `RMB` | Hold to draw the spear back (0.18 s), release to throw |
 | `F` | Quick stab from either weapon |
@@ -50,12 +50,22 @@ fullscreen.
   spear until you walk over it. A spear that lands somewhere you can't reach
   flies back after 15 s. The server enforces the windup.
 - **Sling:** hitscan with an exact hitbox and a 0.8 s reload.
-- **Movement:** a slide boosts you to at least 16 m/s and holds its speed.
-  Jumping out of a slide keeps that speed. Landing with crouch still held
-  drops you into another slide. Sliding carries you up stairs, but each
-  step costs some speed. Sliding down stairs hugs the steps and speeds you
-  up. Air strafing adds speed. The jump is low
-  (about 1.3 m).
+- **Movement** rewards timing, not holding keys (think Straftat):
+  - **Bunny hopping:** press jump in the tenth of a second before you land
+    (or within 0.05 s after) and you keep all your speed. The speed readout
+    flashes gold and ticks on a perfect hop. Holding jump only jumps once;
+    a late press lets ground friction eat your speed. Bind the mouse wheel
+    to jump (Settings → Controls) to time hops the classic way.
+  - **Slides:** a fresh crouch press boosts you to at least 16 m/s, and the
+    slide holds its speed. Press crouch in the air and you land straight
+    into a boosted slide. Holding crouch through a landing still slides,
+    but with no boost. Jumping out of a slide keeps its speed.
+  - **Air:** strafing while turning adds speed (Quake-style). Holding just
+    forward steers you toward where you look without adding speed: enough
+    to line up a landing.
+  - **Stairs:** sliding carries you up, but each step costs some speed;
+    sliding down hugs the steps and speeds you up. The jump is low (about
+    1.3 m).
 
 ## Seeing in the dark: the scan
 
@@ -169,12 +179,13 @@ server needed. The map, *The Quarry*, is open to a red night sky:
 
 ## Sound and style
 
-- **Music:** five original 90s boom-bap beats, synthesised live: *Kiln
-  Cypher*, *Red Moon Blues* and *Flint Street* (swung, with turnaround
-  fills), plus *Bone Yard* and *Obsidian Walk* (steady: straight time, the
-  same beat every bar). They use hats, kick and snare, Rhodes-style chords
-  and bass, mixed clean with no hiss or distortion. They're new
-  compositions in that style, not samples or covers. The beat muffles while
+- **Music:** eight original beats, synthesised live, each with its own
+  kit and instruments: *Kiln Cypher* and *Flint Street* (swung Rhodes
+  boom-bap), *Bone Yard* and *Obsidian Walk* (steady), *Tar Pit* (half-time
+  808, strings and a bell arpeggio), *Ember Crown* (rimshots, strings and a
+  plucked melody), *Blood Drum* (tribal toms and brass) and *Slow Burn*
+  (half-time piano and a whistle). Mixed clean: no hi-hats, hiss,
+  distortion or clicks. They're new compositions, not samples or covers. The beat muffles while
   you're dead or paused.
 - **No ambient sound:** you hear the fight and the beat, nothing else.
 - **Mixer:** Settings → Audio has sliders for master, weapons, kills &

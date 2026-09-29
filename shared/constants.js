@@ -32,6 +32,13 @@ export const GROUND_ACCEL = 120;         // must beat FRICTION * RUN_SPEED to re
 export const FRICTION = 9;
 export const AIR_ACCEL = 70;
 export const AIR_WISH_CAP = 1.2;         // low cap + high accel = strafe gains
+// Air control: holding only forward (or back) in the air turns your velocity
+// toward where you look, at this many radians per second, without adding
+// speed. Tame on purpose: enough to line up a landing, not a jet.
+export const AIR_TURN_RATE = 2.2;
+// Bunny hopping is timed, not held: a jump press counts if it lands within
+// JUMP_BUFFER before touching down, or within BHOP_GRACE after. Inside that
+// window you keep all your speed; miss it and ground friction bites.
 export const SLIDE_SPEED = 16;           // slide start sets speed to at least this
 export const SLIDE_FRICTION = 0.5;        // low: a slide carries its speed (ULTRAKILL-style)
 export const SLIDE_STEER = 10;
@@ -45,7 +52,8 @@ export const SLIDE_STAIR_UP_COST = 0.3;
 export const SLIDE_STAIR_DOWN_GAIN = 1.4;
 export const SLIDE_JUMP_MULT = 1.08;     // jumping out of a slide keeps and adds speed
 export const MAX_SPEED = 26;             // hard horizontal cap
-export const JUMP_BUFFER = 0.12;
+export const JUMP_BUFFER = 0.1;
+export const BHOP_GRACE = 0.05;
 export const COYOTE_TIME = 0.1;
 
 // Weapons: everything kills in one hit.

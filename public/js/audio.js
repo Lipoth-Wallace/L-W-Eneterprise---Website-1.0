@@ -4,9 +4,9 @@
 // movement, ui, music), then master, then a compressor. There's no ambience:
 // the only sounds are the game's and the beat.
 //
-// Music: five original 90s boom-bap beats, sequenced live. 16th hats, kick
-// and snare, Rhodes-style 7th/9th chords and a bass line, kept clean: no
-// vinyl hiss or saturation. These are new compositions in the style, not
+// Music: eight original beats in a 90s boom-bap vein, sequenced live, each
+// with its own drum kit, instruments and groove. Kept clean on purpose: no
+// hi-hats, no vinyl hiss, no saturation, no clicks. These are new compositions in the style, not
 // recreations of any existing record.
 
 let ctx = null, master = null, noiseBuf = null, slideGain = null;
@@ -156,6 +156,8 @@ export const sfx = {
     noiseHit({ freq: 200, type: 'lowpass', peak: 0.9, decay: 0.6, bus: 'hits' });
   },
   jump() { noiseHit({ freq: 600, q: 1, peak: 0.12, decay: 0.06, bus: 'movement' }); },
+  // A perfectly timed hop: a small bright tick on top of the jump
+  perfectHop() { tone(1900, 0.04, 'sine', 0.05, 1.3, 0, 'movement'); },
   land() { tone(80, 0.08, 'sine', 0.3, 0.6, 0, 'movement'); noiseHit({ freq: 300, peak: 0.15, decay: 0.05, bus: 'movement' }); },
   slide() { noiseHit({ freq: 900, sweepTo: 400, peak: 0.09, decay: 0.18, bus: 'movement' }); },
   step() { noiseHit({ freq: 500 + Math.random() * 200, q: 2, peak: 0.07, decay: 0.04, bus: 'movement' }); },
@@ -245,19 +247,12 @@ export const TRACKS = [
     stabs: [[0, 6], [6, 2], [11, 2]],
   },
   {
-    name: 'Red Moon Blues', bpm: 84, swing: 0.58, root: 38,        // D minor
-    chords: [[0, 7, 10, 15], [5, 10, 13, 17], [8, 12, 15, 21], [7, 11, 14, 18]],   // Dm7 Gm7 Bbmaj7 A7
-    kick: [0, 3, 8, 11], snare: [4, 12], ghost: [7, 14], bass: [[0, 0, 4], [8, 7, 2], [11, 0, 3]],
-    stabs: [[0, 4], [8, 3]],
-  },
-  {
     name: 'Flint Street', bpm: 93, swing: 0.56, root: 40,          // E minor
     chords: [[0, 7, 10, 14], [8, 12, 15, 19], [5, 12, 15, 19], [7, 11, 14, 18]],   // Em9 Cmaj7 Am7 B7
     kick: [0, 6, 9, 13], snare: [4, 12], ghost: [10], bass: [[0, 0, 3], [6, 0, 2], [9, 7, 2], [13, 10, 2]],
     stabs: [[2, 3], [10, 2], [14, 2]],
   },
-  // The last two are steady: straight time, the same kick and snare every
-  // bar, no turnaround fills
+  // Steady: straight time, the same kick and snare every bar, no fills
   {
     name: 'Bone Yard', bpm: 90, swing: 0.5, root: 43, steady: true,   // G minor
     chords: [[0, 7, 10, 14], [8, 12, 15, 19], [5, 8, 12, 15], [7, 11, 14, 17]],   // Gm9 Ebmaj7 Cm7 D7
@@ -269,6 +264,42 @@ export const TRACKS = [
     chords: [[0, 7, 10, 14], [8, 12, 15, 19], [5, 8, 15, 19], [7, 11, 14, 17]],   // Cm9 Abmaj7 Fm9 G7
     kick: [0, 6, 8], snare: [4, 12], ghost: [], bass: [[0, 0, 5], [6, 0, 2], [8, 0, 6]],
     stabs: [[0, 4], [8, 4], [12, 2]],
+  },
+  // Half-time 808 boom, gliding sub, string pad, a bell arpeggio with echo
+  {
+    name: 'Tar Pit', bpm: 72, swing: 0.5, root: 41, steady: true, form: true, chordBars: 2,   // F minor
+    kit: 'boom', keys: 'strings', bassVoice: 'sub', echo: 0.35,
+    chords: [[0, 3, 7, 14], [8, 12, 15, 19]],
+    kick: [0, 10], snare: [8], ghost: [], bass: [[0, 0, 10], [10, 0, 6]],
+    stabs: [[0, 16]],
+    lead: { voice: 'bell', oct: 24, in: 'all', notes: [[0, 0, 0, 2], [0, 3, 3, 2], [0, 6, 7, 2], [0, 10, 12, 3], [1, 0, 10, 2], [1, 3, 7, 2], [1, 6, 3, 2], [1, 10, 0, 3]] },
+  },
+  // Rimshots, slow strings, a plucked pentatonic melody with echo
+  {
+    name: 'Ember Crown', bpm: 84, swing: 0.56, root: 40, form: true, chordBars: 2,   // E minor
+    kit: 'rim', keys: 'strings', bassVoice: 'tri', echo: 0.3,
+    chords: [[3, 7, 10, 14], [8, 12, 15, 19]],
+    kick: [0, 7, 10], snare: [4, 12], ghost: [], bass: [[0, 0, 4], [7, 0, 2], [10, 7, 3]],
+    stabs: [[0, 16]],
+    lead: { voice: 'pluck', oct: 24, in: 'all', notes: [[0, 0, 12, 1], [0, 2, 10, 1], [0, 4, 7, 2], [0, 7, 10, 1], [0, 8, 7, 1], [0, 10, 5, 2], [0, 12, 3, 2], [1, 0, 7, 1], [1, 2, 5, 1], [1, 4, 3, 2], [1, 8, 0, 4], [1, 14, -2, 2]] },
+  },
+  // Tribal toms and a war-drum kick, droning sub, brass stabs
+  {
+    name: 'Blood Drum', bpm: 104, swing: 0.5, root: 38, steady: true, form: true, chordBars: 4,   // D minor
+    kit: 'tribal', keys: 'horns', bassVoice: 'sub', echo: 0.15,
+    chords: [[0, 3, 7, 12], [8, 12, 15, 20], [0, 3, 7, 12], [7, 11, 14, 19]],
+    kick: [0, 6, 8, 11], snare: [12], ghost: [], bass: [[0, 0, 8], [8, 0, 8]],
+    toms: [[2, 1.2, 0.6], [3, 1, 0.5], [10, 0.8, 0.7], [14, 1.3, 0.6], [15, 1.1, 0.5]],
+    stabs: [[0, 3], [11, 2]],
+  },
+  // Half-time and sparse: a descending piano line over a sub, a lonely whistle
+  {
+    name: 'Slow Burn', bpm: 76, swing: 0.5, root: 45, steady: true, form: true,   // A minor
+    kit: 'dusty', keys: 'piano', bassVoice: 'sub', echo: 0.4,
+    chords: [[0, 3, 7, 12], [-2, 3, 7, 12], [-3, 3, 6, 12], [-4, 3, 7, 11]],
+    kick: [0, 11], snare: [8], ghost: [], bass: [[0, 0, 16]],
+    stabs: [[0, 4], [6, 2], [12, 4]],
+    lead: { voice: 'whistle', oct: 12, in: 'B', notes: [[0, 0, 12, 6], [0, 8, 15, 4], [0, 12, 14, 4], [1, 0, 12, 8], [1, 10, 7, 6]] },
   },
 ];
 
@@ -367,20 +398,9 @@ function schedule() {
   }
 }
 
-// Hat patterns: a velocity per 16th (0 = silent)
-const HATS = {
-  dusty: [0.55, 0.18, 0.35, 0.2, 0.55, 0.18, 0.35, 0.2, 0.55, 0.18, 0.35, 0.2, 0.55, 0.18, 0.35, 0.2],
-  steady: [0.5, 0.2, 0.4, 0.2, 0.5, 0.2, 0.4, 0.2, 0.5, 0.2, 0.4, 0.2, 0.5, 0.2, 0.4, 0.2],
-  eighths: [0.5, 0, 0.3, 0, 0.5, 0, 0.3, 0, 0.5, 0, 0.3, 0, 0.5, 0, 0.3, 0],
-  rolling: [0.5, 0.15, 0.3, 0.15, 0.45, 0.15, 0.3, 0.4, 0.5, 0.15, 0.3, 0.15, 0.45, 0.3, 0.35, 0.45],
-  offbeat: [0, 0, 0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0],
-  sparse: [0.4, 0, 0, 0, 0, 0, 0.3, 0, 0.4, 0, 0, 0, 0, 0, 0.3, 0],
-  shaker: [0.35, 0.15, 0.25, 0.15, 0.35, 0.15, 0.25, 0.15, 0.35, 0.15, 0.25, 0.15, 0.35, 0.15, 0.25, 0.3],
-};
-
 // A track can pick its sounds and shape (every field is optional; the
 // defaults are the original dusty kit, Rhodes and triangle bass):
-//   kit: dusty | hard | boom | rim | tribal     hats: a HATS name
+//   kit: dusty | hard | boom | rim | tribal
 //   keys: rhodes | organ | pluck | bell | strings | horns | piano | whistle
 //   bassVoice: tri | sub | saw                  chordBars: bars per chord
 //   toms: [[step, pitch, vel]]                  echo: 0..0.5 on the lead
@@ -401,11 +421,6 @@ function playStep(s, t) {
   if (!drop && (tr.snare.includes(step) || (fill && step % 2 === 1))) kit.snare(t, 1);
   if (!intro && tr.ghost.includes(step)) kit.snare(t, 0.25);
   if (tr.toms && !intro) for (const [at, pitch, vel] of tr.toms) if (at === step) tom(t, pitch, vel);
-  const hv = (HATS[tr.hats] || (tr.steady ? HATS.steady : HATS.dusty))[step];
-  if (hv) {
-    if (tr.hats === 'shaker') shaker(t, hv);
-    else hat(t, hv, !tr.steady && !tr.hats && step === 14 && bar % 2 === 1);
-  }
 
   const bass = BASS[tr.bassVoice] || bassNote;
   if (!intro) for (const [at, off, len] of tr.bass) if (at === step) bass(midiHz(tr.root - 12 + chord[0] + off), len * six, t);
@@ -431,16 +446,11 @@ function kick(t) {
   o.connect(g).connect(musicIn);
   o.start(t);
   o.stop(t + 0.5);
-  tone(1200, 0.012, 'sine', 0.08, 0.5, 0, 'music', t);   // a short beater click, no noise
 }
 
 function snare(t, vel) {
   noiseHit({ freq: 1900, q: 0.7, peak: 0.55 * vel, decay: 0.18, bus: 'music', at: t });
   tone(190, 0.09, 'triangle', 0.3 * vel, 0.8, 0, 'music', t);
-}
-
-function hat(t, vel, open) {
-  noiseHit({ freq: 9000, q: 1.2, peak: 0.09 * vel, decay: open ? 0.18 : 0.03, pan: 0.15, bus: 'music', at: t });
 }
 
 function bassNote(freq, len, t) {
@@ -493,7 +503,6 @@ function kickHard(t) {
   env(g, t, 1.1, 0.002, 0.3);
   o.connect(g).connect(musicIn);
   o.start(t); o.stop(t + 0.4);
-  tone(2000, 0.01, 'sine', 0.1, 0.5, 0, 'music', t);
 }
 
 // 808-style: a long, low boom
@@ -517,9 +526,10 @@ function snap(t, vel) {
   tone(220, 0.07, 'triangle', 0.25 * vel, 0.8, 0, 'music', t);
 }
 
+// A woody knock rather than a bright tick
 function rim(t, vel) {
-  tone(1700, 0.03, 'triangle', 0.22 * vel, 0.9, 0, 'music', t);
-  noiseHit({ freq: 3500, q: 2, peak: 0.28 * vel, decay: 0.03, bus: 'music', at: t });
+  tone(520, 0.06, 'triangle', 0.3 * vel, 0.85, 0, 'music', t);
+  tone(260, 0.08, 'sine', 0.2 * vel, 0.9, 0, 'music', t);
 }
 
 // Low drum; pitch scales 120 Hz
@@ -531,10 +541,6 @@ function tom(t, pitch = 1, vel = 0.6) {
   env(g, t, 0.7 * vel, 0.003, 0.35);
   o.connect(g).connect(musicIn);
   o.start(t); o.stop(t + 0.45);
-}
-
-function shaker(t, vel) {
-  noiseHit({ freq: 6000, q: 1.5, peak: 0.1 * vel, attack: 0.012, decay: 0.05, pan: -0.2, bus: 'music', at: t });
 }
 
 const KITS = {

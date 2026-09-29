@@ -552,9 +552,17 @@ addEventListener('mouseup', (e) => {
   for (const a of actionsFor(code)) onActionRelease(a);
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-addEventListener('wheel', () => {
-  if (!game || !locked() || !game.alive) return;
-  setWeapon(game.weapon === 'spear' ? 'sling' : 'spear');
+// The wheel can be bound like a key (WheelUp / WheelDown): each notch is a
+// press. Bound to jump, it's the classic way to time bunny hops. Unbound, it
+// swaps weapons.
+addEventListener('wheel', (e) => {
+  if (!game || !locked() || !game.alive || !e.deltaY) return;
+  const acts = actionsFor(e.deltaY > 0 ? 'WheelDown' : 'WheelUp');
+  if (!acts.length) { setWeapon(game.weapon === 'spear' ? 'sling' : 'spear'); return; }
+  for (const a of acts) {
+    if (a === 'jump') game.jumpPulse = 1;
+    else { onActionPress(a); onActionRelease(a); }
+  }
 }, { passive: true });
 
 document.addEventListener('pointerlockchange', () => {
@@ -915,7 +923,7 @@ function update(dt, t) {
   const input = {
     fwd: k('forward') - k('back'),
     strafe: k('right') - k('left'),
-    jump: held('jump'),
+    jump: held('jump') || game.jumpPulse > 0,
     crouch: held('slide'),
     // Auto sprint flips the key: always run, hold Sprint to walk.
     sprint: settings.autoSprint ? !held('sprint') : held('sprint'),
@@ -933,11 +941,13 @@ function update(dt, t) {
       const ev = stepPlayer(L, input, PHYS_DT, game.map.boxes, game.map.pads);
       if (ev.launched) sfx.launch();
       if (ev.jumped) sfx.jump();
+      if (ev.perfect) { sfx.perfectHop(); game.perfectAt = nowS(); }
       if (ev.landed) {
         game.landDip = Math.min(0.22, Math.max(0, -vyBefore * 0.014));
         if (vyBefore < -4) sfx.land();
       }
       if (ev.slid) sfx.slide();
+      game.jumpPulse = 0;   // a wheel notch is one press, used by the first step that runs
     }
     game.sendAcc += dt;
     if (game.sendAcc >= 1 / C.STATE_RATE) {
@@ -1064,7 +1074,7 @@ function updateHud(hs, t) {
 
   const spd = Math.round(hs);
   setText('speed-val', String(spd));
-  $('speed').className = spd >= 18 ? 'faster' : spd >= 12 ? 'fast' : '';
+  $('speed').className = (spd >= 18 ? 'faster' : spd >= 12 ? 'fast' : '') + (nowS() - (game.perfectAt || 0) < 0.25 ? ' perfect' : '');
 
   $('w-spear').classList.toggle('active', game.weapon === 'spear');
   $('w-sling').classList.toggle('active', game.weapon === 'sling');
