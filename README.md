@@ -69,9 +69,11 @@ Showdown's Dark Sight:
   sideways, and a churning amber shroud rides along with them to blur the
   head and edges. A moving fighter also drags a mist trail behind them that
   points back the way they came, so you can read their direction.
-- The eyes are two amber kites joined at the middle, 80% opaque. They leave
-  your chest and rise to the crosshair, and **only you see them**. Your
-  opponent just hears a faint whisper from your direction.
+- The eyes are two kites joined at the middle, 80% see-through, each shaded
+  yellow to red to black. They push out of your chest into the world and grow
+  exponentially to three times your height. They light the surfaces they pass
+  and splat flat against the first wall in their way. **Only you see them**;
+  your opponent just hears a faint whisper from your direction.
 
 ## Hitboxes
 

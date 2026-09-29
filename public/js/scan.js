@@ -1,5 +1,7 @@
-// The scan: press it and a pair of 2D eyes shoots out from the crosshair,
-// growing exponentially. A wavefront expands at the same exponential rate
+// The scan: press it and a pair of kite-shaped eyes pushes out of your chest
+// into the world, growing exponentially to three times your height. They light
+// the surfaces they pass and splat against the first wall in their path. A
+// wavefront expands at the same exponential rate
 // through a cone in front of you, and any fighter it reaches shows up through
 // walls for SCAN_REVEAL seconds (after Hunt: Showdown's Dark Sight) as:
 //   - a sliced amber ghost of their body (see createGhost in characters.js):
@@ -7,39 +9,132 @@
 //   - a wisp of mist that streams out behind them when they move, so you can
 //     read which way they're heading.
 //
-// The eyes are yours alone: opponents never see them. They only hear a faint
-// whisper from your direction.
+// The eyes exist only in your own scene: opponents never see them. They only
+// hear a faint whisper from your direction.
 
 import * as THREE from 'three';
 import * as C from '/shared/constants.js';
 import { waveRadius, inCone } from '/shared/scan.js';
+import { rayMap } from '/shared/raycast.js';
 
-// Two kite-shaped eyes joined at their inner points, each with a slit pupil.
-// Only the scanning player ever sees them (a HUD overlay).
-export const EYES_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40">
-  <defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="0.5" stop-color="#ffa000"/><stop offset="1" stop-color="#b85400"/></linearGradient></defs>
-  <g fill="url(#k)" stroke="#ffc84a" stroke-width="1.2" stroke-linejoin="round">
-    <path d="M4 20 L34 6 L56 20 L34 34 Z"/>
-    <path d="M116 20 L86 6 L64 20 L86 34 Z"/>
-    <path d="M55 18.6 L65 18.6 L65 21.4 L55 21.4 Z"/>
-  </g>
-  <g fill="#1a0602"><path d="M34 11 L36.4 20 L34 29 L31.6 20 Z"/><path d="M86 11 L88.4 20 L86 29 L83.6 20 Z"/></g>
-</svg>`;
+const EYES_TIME = 0.8;                       // flight time
+const EYES_MAX_H = 3 * C.PLAYER_HEIGHT;      // full size: three times your height
+const EYES_START_H = 0.25;
+const EYES_GROW = Math.log(EYES_MAX_H / EYES_START_H) / 0.55;   // full size after 0.55 s
+const EYES_OPACITY = 0.2;                    // 80% see-through
 
-export function createScan(scene, overlay) {
+// Two kites joined at their inner tips, each with a slit pupil and a wide
+// radial gradient: yellow at the heart, through red, to black at the edges.
+function eyesTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 192;
+  const g = c.getContext('2d');
+  const kite = (tip, mid, inner) => {
+    g.beginPath();
+    g.moveTo(tip, 96);
+    g.lineTo(mid, 34);
+    g.lineTo(inner, 96);
+    g.lineTo(mid, 158);
+    g.closePath();
+    const grad = g.createRadialGradient(mid, 96, 4, mid, 96, 132);
+    grad.addColorStop(0, '#fff08a');
+    grad.addColorStop(0.22, '#ffc21a');
+    grad.addColorStop(0.5, '#e0280a');
+    grad.addColorStop(0.78, '#5a0602');
+    grad.addColorStop(1, '#000000');
+    g.fillStyle = grad;
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = '#2a0402';
+    g.stroke();
+    // Slit pupil
+    g.beginPath();
+    g.moveTo(mid, 56);
+    g.lineTo(mid + 9, 96);
+    g.lineTo(mid, 136);
+    g.lineTo(mid - 9, 96);
+    g.closePath();
+    g.fillStyle = '#000000';
+    g.fill();
+  };
+  kite(10, 150, 244);
+  kite(502, 362, 268);
+  g.fillStyle = '#b01806';
+  g.fillRect(236, 90, 40, 12);           // the bridge joining them
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * boxes: the map's collision boxes (the eyes stop at walls).
+ * onSplat(point, normal): called when the eyes hit a wall, for dust.
+ */
+export function createScan(scene, { boxes = [], onSplat } = {}) {
   let wave = null;                 // our current scan: { eye, dir, start, found:Set }
   const revealed = new Map();      // target key -> { until, mist }
   const puff = puffTexture();
 
+  // The eyes: one sprite (always faces you) and an amber light that travels
+  // with it. The light stays in the scene at zero so adding it never forces
+  // shaders to recompile mid-fight.
+  const eyesMat = new THREE.SpriteMaterial({ map: eyesTexture(), transparent: true, opacity: 0, depthWrite: false, fog: false });
+  const eyes = new THREE.Sprite(eyesMat);
+  eyes.visible = false;
+  eyes.renderOrder = 6;
+  scene.add(eyes);
+  const glow = new THREE.PointLight(0xff9a20, 0, 11, 1.6);
+  scene.add(glow);
+  let flight = null;               // { eye, dir, start, wallT, normal, hitAt }
+
+  function updateEyes(now) {
+    if (!flight) return;
+    const age = now - flight.start;
+    if (age > EYES_TIME) {
+      flight = null;
+      eyes.visible = false;
+      glow.intensity = 0;
+      return;
+    }
+    // Push out along your aim at the wave's pace, rising from chest to eye level
+    const reach = flight.wallT - 0.4;
+    let travel = 0.9 + waveRadius(age);
+    if (travel >= reach && flight.hitAt == null) {
+      flight.hitAt = age;
+      if (onSplat && flight.wallT < C.SCAN_RANGE) {
+        const e = flight.eye, d = flight.dir;
+        onSplat([e[0] + d[0] * flight.wallT, e[1] + d[1] * flight.wallT, e[2] + d[2] * flight.wallT], flight.normal);
+      }
+    }
+    travel = Math.min(travel, reach);
+    const lift = -0.45 * Math.max(0, 1 - travel / 4);
+    const e = flight.eye, d = flight.dir;
+    eyes.position.set(e[0] + d[0] * travel, e[1] + d[1] * travel + lift, e[2] + d[2] * travel);
+
+    // Grow exponentially to three times your height
+    const h = Math.min(EYES_MAX_H, EYES_START_H * Math.exp(EYES_GROW * age));
+    let sx = h * (512 / 192), sy = h, fade = 1 - Math.max(0, (age - EYES_TIME * 0.6) / (EYES_TIME * 0.4));
+    if (flight.hitAt != null) {
+      // Splat: spread flat across the wall and die quickly
+      const k = age - flight.hitAt;
+      sx *= 1 + k * 5;
+      sy *= Math.max(0.12, 1 - k * 4);
+      fade *= Math.max(0, 1 - k / 0.25);
+    }
+    eyes.scale.set(sx, sy, 1);
+    eyesMat.opacity = EYES_OPACITY * fade;
+    glow.position.copy(eyes.position);
+    glow.intensity = 9 * fade;
+  }
+
   return {
-    /** Start our own scan. Returns nothing; reveals happen in update(). */
+    /** Start our own scan. Reveals and the eyes' flight happen in update(). */
     fire(eye, dir, now) {
       wave = { eye: [...eye], dir: [...dir], start: now, found: new Set() };
-      if (overlay) {
-        overlay.classList.remove('go');
-        void overlay.offsetWidth;          // restart the CSS animation
-        overlay.classList.add('go');
-      }
+      const hit = rayMap(eye, dir, C.SCAN_RANGE, boxes);
+      flight = { eye: [...eye], dir: [...dir], start: now, wallT: hit.t, normal: hit.normal, hitAt: null };
+      eyes.visible = true;
     },
     /**
      * targets: [{ key, model, p: [x, y, z] (feet) }]. Returns the number of
@@ -73,6 +168,7 @@ export function createScan(scene, overlay) {
         r.mist.update(dt, t, k);
         r.model.setGhost(k, now);
       }
+      updateEyes(now);
       return fresh;
     },
     /** 0..1 while our wave is out, for the screen tint. */
@@ -83,6 +179,9 @@ export function createScan(scene, overlay) {
       for (const r of revealed.values()) { r.mist.dispose(); r.model.setGhost(0, 0); }
       revealed.clear();
       wave = null;
+      flight = null;
+      eyes.visible = false;
+      glow.intensity = 0;
     },
   };
 }

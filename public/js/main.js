@@ -17,7 +17,7 @@ import { initAudio, sfx, applyVolumes, playMusic, setMusicMuffled, setAmbience }
 import { setupMenu } from './menu.js';
 import { settings, actionsFor, onSettingsChange, keyName } from './settings.js';
 import { createChain } from './chain.js';
-import { createScan, EYES_SVG } from './scan.js';
+import { createScan } from './scan.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -31,7 +31,6 @@ let vm = null, chain = null, scan = null;
 let game = null;
 
 const menu = setupMenu({ onStart: startMatch });
-$('scan-eyes').style.backgroundImage = `url("data:image/svg+xml;utf8,${encodeURIComponent(EYES_SVG)}")`;
 // ?debug&slow=0.2 runs game time at a fraction of real time, so automated
 // browser tests on slow software renderers can capture short effects.
 const DEBUG = new URLSearchParams(location.search);
@@ -86,7 +85,10 @@ function loadMap(map) {
   world = buildWorld(scene, map);
   effects = createEffects(scene, map);
   chain = createChain(scene);
-  scan = createScan(scene, $('scan-eyes'));
+  scan = createScan(scene, {
+    boxes: map.boxes,
+    onSplat: (point, normal) => { effects.impact(point, normal); effects.impact(point, normal); },
+  });
   setAmbience(map.id === 'kiln' ? 'cave' : 'outdoor');
 }
 
