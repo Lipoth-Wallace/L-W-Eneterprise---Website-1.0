@@ -170,6 +170,14 @@ Known gap: the server checks movement speed but not wall collision, so a
 modified client could clip through walls. Before a public launch, the fix is
 for the server to also run `shared/physics.js` on submitted inputs.
 
+## Offline test page
+
+`npm run build:offline` bundles the whole client into one self-contained
+HTML file (`dist/bloodflint-offline.html`). It has no server, so the online
+buttons are hidden. It keeps the practice range, the parkour course, and solo
+walks of the Kiln and the Thicket, which is handy for a quick look in any
+browser.
+
 ## Deploy
 
 This needs a host that keeps a Node process and WebSockets running. Static

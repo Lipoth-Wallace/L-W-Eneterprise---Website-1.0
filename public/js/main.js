@@ -113,7 +113,7 @@ function startMatch(opts) {
   initRenderer();
   const practice = !!opts.practice;
   // Online, the room decides the map; the welcome message switches to it.
-  const map = practice ? MAPS.range : MAPS[settings.map] || MAPS.kiln;
+  const map = practice ? MAPS[opts.practiceMap] || MAPS.range : MAPS[settings.map] || MAPS.kiln;
   loadMap(map);
   menu.hide();
   vm = createViewmodel(settings.character);
@@ -146,7 +146,7 @@ function startMatch(opts) {
   $('feed').innerHTML = '';
   if (practice) {
     setWeapon('spear');
-    feed('PRACTICE: TARGETS DOWNRANGE, COURSE BEHIND YOU');
+    feed(map.bots ? 'PRACTICE: TARGETS DOWNRANGE, COURSE BEHIND YOU' : `EXPLORING ${map.name.toUpperCase()} ALONE`);
   } else {
     connect(opts);
   }
@@ -635,7 +635,7 @@ function fire(kind) {
 // ---------------------------------------------------------------- practice
 
 function spawnBots() {
-  game.bots = game.map.bots.map((b) => {
+  game.bots = (game.map.bots || []).map((b) => {
     const model = createCharacter(b.char);
     model.group.position.set(...b.p);
     scene.add(model.group);

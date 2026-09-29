@@ -98,6 +98,23 @@ export function setupMenu({ onStart }) {
   $('quick').addEventListener('click', () => start({}));
   $('create').addEventListener('click', () => start({ private: true }));
   $('practice').addEventListener('click', () => start({ practice: true }));
+  // Offline build (no server): hide online play, offer solo walks of the arenas.
+  if (globalThis.BLOODFLINT_OFFLINE) {
+    for (const id of ['quick', 'create', 'join', 'code']) $(id).hidden = true;
+    $('code').parentElement.hidden = true;
+    $('arena').closest('label').hidden = true;
+    const note = document.createElement('p');
+    note.className = 'offline-note';
+    note.textContent = 'Offline test build: 1v1 needs the game server. Try the range, the course, and the arenas solo.';
+    $('practice').before(note);
+    for (const [id, label] of [['kiln', 'Explore the Kiln'], ['thicket', 'Explore the Thicket']]) {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = label;
+      b.addEventListener('click', () => start({ practice: true, practiceMap: id }));
+      $('open-settings').before(b);
+    }
+  }
   $('join').addEventListener('click', () => {
     if (code.value.length !== 4) { $('menu-error').textContent = 'Room codes are four letters.'; return; }
     start({ room: code.value });

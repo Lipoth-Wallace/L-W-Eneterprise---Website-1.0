@@ -235,3 +235,5 @@ kbd { font-family: var(--pixel); font-size: 11px; color: var(--bone); background
   mask-image: radial-gradient(ellipse at 50% 50%, transparent 30%, #000 70%);
 }
 .arena select { flex: 1; }
+
+.offline-note { margin: 0; color: var(--bone); font-size: 18px; border-left: 3px solid var(--blood); padding-left: 10px; }
