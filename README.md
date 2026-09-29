@@ -71,7 +71,7 @@ Showdown's Dark Sight:
   points back the way they came, so you can read their direction.
 - The eyes are two kites joined at the middle, 80% see-through, each shaded
   yellow to red to black. They push out of your chest into the world and grow
-  exponentially, faster than they travel, until they tower over the map. They light the surfaces they pass
+  exponentially to three times your height. They light the surfaces they pass
   and splat flat against the first wall in their way. **Only you see them**;
   your opponent just hears a faint whisper from your direction.
 

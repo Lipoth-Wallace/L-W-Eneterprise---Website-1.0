@@ -1,5 +1,5 @@
 // The scan: press it and a pair of kite-shaped eyes pushes out of your chest
-// into the world, growing exponentially until they fill your view. They light
+// into the world, growing exponentially to three times your height. They light
 // the surfaces they pass and splat against the first wall in their path. A
 // wavefront expands at the same exponential rate
 // through a cone in front of you, and any fighter it reaches shows up through
@@ -18,14 +18,9 @@ import { waveRadius, inCone } from '/shared/scan.js';
 import { rayMap } from '/shared/raycast.js';
 
 const EYES_TIME = 0.8;                       // flight time
-const EYES_MIN_H = 3 * C.PLAYER_HEIGHT;      // never smaller than three times your height once out
+const EYES_MAX_H = 3 * C.PLAYER_HEIGHT;      // full size: three times your height
 const EYES_START_H = 0.25;
-// Size is set relative to how far the eyes have travelled, and that ratio
-// grows exponentially, so on screen they keep swelling instead of perspective
-// shrinking them: from a small pair at your chest to spilling past the screen.
-const EYES_RATIO_START = 0.12;
-const EYES_RATIO_END = 2.6;
-const EYES_RATIO_GROW = Math.log(EYES_RATIO_END / EYES_RATIO_START) / EYES_TIME;
+const EYES_GROW = Math.log(EYES_MAX_H / EYES_START_H) / 0.55;   // full size after 0.55 s
 const EYES_OPACITY = 0.2;                    // 80% see-through
 
 // Two kites joined at their inner tips, each with a slit pupil and a wide
@@ -117,10 +112,8 @@ export function createScan(scene, { boxes = [], onSplat } = {}) {
     const e = flight.eye, d = flight.dir;
     eyes.position.set(e[0] + d[0] * travel, e[1] + d[1] * travel + lift, e[2] + d[2] * travel);
 
-    // Grow exponentially, faster than they travel
-    const ratio = EYES_RATIO_START * Math.exp(EYES_RATIO_GROW * age);
-    const out = Math.min(1, age / 0.2);   // reach full scale soon after leaving the chest
-    const h = Math.max(EYES_START_H, travel * ratio, EYES_MIN_H * out * Math.min(1, ratio / 0.6));
+    // Grow exponentially to three times your height
+    const h = Math.min(EYES_MAX_H, EYES_START_H * Math.exp(EYES_GROW * age));
     let sx = h * (512 / 192), sy = h, fade = 1 - Math.max(0, (age - EYES_TIME * 0.6) / (EYES_TIME * 0.4));
     if (flight.hitAt != null) {
       // Splat: spread flat across the wall and die quickly
