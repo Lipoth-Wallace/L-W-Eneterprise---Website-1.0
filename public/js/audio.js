@@ -4,11 +4,10 @@
 // movement, ui, music), then master, then a compressor. There's no ambience:
 // the only sounds are the game's and the beat.
 //
-// Music: three original 90s boom-bap beats, sequenced live. Swung 16th hats,
-// dusty kick and snare, Rhodes-style 7th/9th chords, a bass line and vinyl
-// crackle, all through a little saturation and a low-pass for that sampler
-// grit. These are new compositions in the style, not recreations of any
-// existing record.
+// Music: five original 90s boom-bap beats, sequenced live. 16th hats, kick
+// and snare, Rhodes-style 7th/9th chords and a bass line, kept clean: no
+// vinyl hiss or saturation. These are new compositions in the style, not
+// recreations of any existing record.
 
 let ctx = null, master = null, noiseBuf = null, slideGain = null;
 const buses = {};
@@ -257,31 +256,43 @@ export const TRACKS = [
     kick: [0, 6, 9, 13], snare: [4, 12], ghost: [10], bass: [[0, 0, 3], [6, 0, 2], [9, 7, 2], [13, 10, 2]],
     stabs: [[2, 3], [10, 2], [14, 2]],
   },
+  // The last two are steady: straight time, the same kick and snare every
+  // bar, no turnaround fills
+  {
+    name: 'Bone Yard', bpm: 90, swing: 0.5, root: 43, steady: true,   // G minor
+    chords: [[0, 7, 10, 14], [8, 12, 15, 19], [5, 8, 12, 15], [7, 11, 14, 17]],   // Gm9 Ebmaj7 Cm7 D7
+    kick: [0, 8, 10], snare: [4, 12], ghost: [], bass: [[0, 0, 4], [8, 0, 2], [10, 7, 2]],
+    stabs: [[0, 6], [8, 6]],
+  },
+  {
+    name: 'Obsidian Walk', bpm: 86, swing: 0.5, root: 48, steady: true,   // C minor
+    chords: [[0, 7, 10, 14], [8, 12, 15, 19], [5, 8, 15, 19], [7, 11, 14, 17]],   // Cm9 Abmaj7 Fm9 G7
+    kick: [0, 6, 8], snare: [4, 12], ghost: [], bass: [[0, 0, 5], [6, 0, 2], [8, 0, 6]],
+    stabs: [[0, 4], [8, 4], [12, 2]],
+  },
 ];
 
-let musicIn = null;          // entry point for music voices (before the lo-fi chain)
+let musicIn = null;          // entry point for music voices
 let keysBus = null;
 let seq = null;              // { track, step, bar, nextTime }
 let seqTimer = 0;
 let wantedTrack = 0;
 
+const MUSIC_OPEN = 14000;    // low-pass while playing (it closes when you die)
 const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 function initMusic() {
-  // Lo-fi chain: soft saturation, then a low-pass that also does the
-  // "muffled" effect while you're dead.
+  // Clean chain: just a low-pass, wide open while you play, that does the
+  // "muffled" effect while you're dead. The level leaves headroom so the kick
+  // never clips.
   musicIn = ctx.createGain();
-  const shaper = ctx.createWaveShaper();
-  const curve = new Float32Array(1024);
-  for (let i = 0; i < curve.length; i++) { const x = (i / 511.5) - 1; curve[i] = Math.tanh(x * 1.8) / Math.tanh(1.8); }
-  shaper.curve = curve;
   musicLP = ctx.createBiquadFilter();
   musicLP.type = 'lowpass';
-  musicLP.frequency.value = 7000;
+  musicLP.frequency.value = MUSIC_OPEN;
   musicLP.Q.value = 0.5;
   const trim = ctx.createGain();
-  trim.gain.value = 0.55;
-  musicIn.connect(shaper).connect(musicLP).connect(trim).connect(buses.music);
+  trim.gain.value = 0.62;
+  musicIn.connect(musicLP).connect(trim).connect(buses.music);
 
   // Rhodes tremolo lives on its own sub-bus
   keysBus = ctx.createGain();
@@ -294,21 +305,8 @@ function initMusic() {
   trem.start();
   const keysLP = ctx.createBiquadFilter();
   keysLP.type = 'lowpass';
-  keysLP.frequency.value = 2400;
+  keysLP.frequency.value = 4000;
   keysBus.connect(keysLP).connect(musicIn);
-
-  // Vinyl crackle: a sparse stream of clicks plus soft hiss
-  const hiss = ctx.createBufferSource();
-  hiss.buffer = noiseBuf;
-  hiss.loop = true;
-  const hf = ctx.createBiquadFilter();
-  hf.type = 'bandpass';
-  hf.frequency.value = 5000;
-  hf.Q.value = 0.4;
-  const hg = ctx.createGain();
-  hg.gain.value = 0.012;
-  hiss.connect(hf).connect(hg).connect(musicIn);
-  hiss.start();
 }
 
 /** index: a TRACKS index, or 'shuffle'. */
@@ -333,7 +331,7 @@ export function currentTrackName() { return seq ? seq.track.name : ''; }
 /** Muffle the beat (while dead, paused...). */
 export function setMusicMuffled(on) {
   if (!musicLP) return;
-  musicLP.frequency.setTargetAtTime(on ? 380 : 7000, ctx.currentTime, 0.15);
+  musicLP.frequency.setTargetAtTime(on ? 380 : MUSIC_OPEN, ctx.currentTime, 0.15);
 }
 
 function schedule() {
@@ -353,14 +351,14 @@ function schedule() {
 function playStep(s, t) {
   const tr = s.track, step = s.step, bar = s.bar;
   const beat = 60 / tr.bpm;
-  const fill = bar % 8 === 7 && step >= 12;          // a little turnaround every 8 bars
+  const fill = !tr.steady && bar % 8 === 7 && step >= 12;   // a little turnaround every 8 bars
   const chord = tr.chords[bar % tr.chords.length];
 
   if (tr.kick.includes(step) && !(fill && step > 12)) kick(t);
   if (tr.snare.includes(step) || (fill && step % 2 === 1)) snare(t, 1);
   if (tr.ghost.includes(step)) snare(t, 0.25);
-  const hatVel = [0.55, 0.18, 0.35, 0.2][step % 4];
-  hat(t, hatVel, step === 14 && bar % 2 === 1);
+  const hatVel = tr.steady ? [0.5, 0.2, 0.4, 0.2][step % 4] : [0.55, 0.18, 0.35, 0.2][step % 4];
+  hat(t, hatVel, !tr.steady && step === 14 && bar % 2 === 1);
 
   for (const [at, off, len] of tr.bass) if (at === step) bassNote(midiHz(tr.root - 12 + chord[0] + off), len * beat / 4, t);
   for (const [at, len] of tr.stabs) if (at === step) for (const n of chord) rhodes(midiHz(tr.root + 12 + n), len * beat / 4, t);
@@ -376,7 +374,7 @@ function kick(t) {
   o.connect(g).connect(musicIn);
   o.start(t);
   o.stop(t + 0.5);
-  noiseHit({ freq: 3000, type: 'highpass', peak: 0.12, decay: 0.01, bus: 'music', at: t });
+  tone(1200, 0.012, 'sine', 0.08, 0.5, 0, 'music', t);   // a short beater click, no noise
 }
 
 function snare(t, vel) {
@@ -385,7 +383,7 @@ function snare(t, vel) {
 }
 
 function hat(t, vel, open) {
-  noiseHit({ freq: 7500, type: 'highpass', peak: 0.12 * vel, decay: open ? 0.22 : 0.035, pan: 0.15, bus: 'music', at: t });
+  noiseHit({ freq: 9000, q: 1.2, peak: 0.09 * vel, decay: open ? 0.18 : 0.03, pan: 0.15, bus: 'music', at: t });
 }
 
 function bassNote(freq, len, t) {

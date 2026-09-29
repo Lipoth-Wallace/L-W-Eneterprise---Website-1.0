@@ -168,9 +168,11 @@ server needed. The map, *The Quarry*, is open to a red night sky:
 
 ## Sound and style
 
-- **Music:** three original 90s boom-bap beats, synthesised live: *Kiln
-  Cypher*, *Red Moon Blues* and *Flint Street*. They use swung hats, dusty
-  drums, Rhodes-style chords, bass and vinyl crackle. They're new
+- **Music:** five original 90s boom-bap beats, synthesised live: *Kiln
+  Cypher*, *Red Moon Blues* and *Flint Street* (swung, with turnaround
+  fills), plus *Bone Yard* and *Obsidian Walk* (steady: straight time, the
+  same beat every bar). They use hats, kick and snare, Rhodes-style chords
+  and bass, mixed clean with no hiss or distortion. They're new
   compositions in that style, not samples or covers. The beat muffles while
   you're dead or paused.
 - **No ambient sound:** you hear the fight and the beat, nothing else.
